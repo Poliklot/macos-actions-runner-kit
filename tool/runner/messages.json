@@ -1,0 +1,542 @@
+{
+  "config_fields": {
+    "ru": "config.json: неизвестные или отсутствующие поля; секреты здесь запрещены",
+    "en": "config.json: unknown or missing fields; secrets are not allowed here"
+  },
+  "repository_invalid": {
+    "ru": "Некорректный repository",
+    "en": "Invalid repository"
+  },
+  "ci_required": {
+    "ru": "Нужен отдельный обычный CI-пользователь",
+    "en": "A separate non-administrator CI user is required"
+  },
+  "platforms_invalid": {
+    "ru": "platforms: [\"android\"], [\"ios\"] или [\"android\", \"ios\"]",
+    "en": "platforms: [\"android\"], [\"ios\"] or [\"android\", \"ios\"]"
+  },
+  "disk_invalid": {
+    "ru": "minimum_free_gib: целое число от 20 до 1000",
+    "en": "minimum_free_gib: an integer between 20 and 1000"
+  },
+  "hashes_required": {
+    "ru": "Нужны SHA-256 обоих официальных macOS-архивов runner",
+    "en": "SHA-256 checksums of both official macOS runner archives are required"
+  },
+  "mac_required": {
+    "ru": "Нужен Mac; этот комплект не для Linux.",
+    "en": "A Mac is required; this kit does not support Linux."
+  },
+  "architecture": {
+    "ru": "Архитектура",
+    "en": "Architecture"
+  },
+  "architecture_required": {
+    "ru": "Нужны Apple Silicon или Intel x64.",
+    "en": "Apple silicon or Intel x64 is required."
+  },
+  "tools_install": {
+    "ru": "Установи недостающие инструменты под администратором; brew install python gh jq.",
+    "en": "Install missing tools as an administrator: brew install python gh jq."
+  },
+  "missing": {
+    "ru": "нет",
+    "en": "missing"
+  },
+  "not_ready": {
+    "ru": "не готов",
+    "en": "not ready"
+  },
+  "keychain_present": {
+    "ru": "есть",
+    "en": "present"
+  },
+  "keychain_absent": {
+    "ru": "нет — допустимо только если workflow сам управляет временной связкой для подписи",
+    "en": "absent — acceptable only if your signing workflow manages a temporary keychain"
+  },
+  "keychain_error": {
+    "ru": "Не удалось прочитать состояние keychain; передай вывод ошибки.",
+    "en": "Could not read the keychain state; provide the error output."
+  },
+  "sdk_required": {
+    "ru": "Нужны Platform-Tools, Build-Tools, Emulator и Command-line Tools в Android SDK. setup копирует установленный SDK; другой путь: setup --source-sdk /путь/к/sdk.",
+    "en": "Android SDK needs Platform-Tools, Build-Tools, Emulator and Command-line Tools. setup copies an installed SDK; another path: setup --source-sdk /path/to/sdk."
+  },
+  "sdk_copied": {
+    "ru": "Копирование SDK завершено",
+    "en": "SDK copy completed"
+  },
+  "sdk_interrupted": {
+    "ru": "Предыдущий setup прерван. Повтори setup из аккаунта администратора.",
+    "en": "Previous setup was interrupted. Run setup again as an administrator."
+  },
+  "sdk_owner": {
+    "ru": "SDK принадлежит CI-пользователю",
+    "en": "SDK belongs to the CI user"
+  },
+  "setup_repeat": {
+    "ru": "Повтори setup из администраторского аккаунта.",
+    "en": "Run setup again as an administrator."
+  },
+  "jdk_required": {
+    "ru": "Для подготовки SDK нужен установленный JDK; Java для jobs ставит workflow.",
+    "en": "An installed JDK is required to prepare the SDK; the workflow installs Java for jobs."
+  },
+  "emulator_acceleration": {
+    "ru": "Ускорение Android Emulator",
+    "en": "Android Emulator acceleration"
+  },
+  "emulator_fix": {
+    "ru": "Проверь Emulator и поддержку Hypervisor.Framework.",
+    "en": "Check the Emulator and Hypervisor.Framework support."
+  },
+  "signing_clean": {
+    "ru": "Нет незавершённого восстановления настроек подписи",
+    "en": "No pending signing recovery"
+  },
+  "signing_recover": {
+    "ru": "Не удаляй журнал восстановления. Останови runner и восстанови состояние по журналу.",
+    "en": "Do not delete recovery state. Stop the runner and restore the state using its journal."
+  },
+  "needs_attention": {
+    "ru": "НУЖНО",
+    "en": "REQUIRED"
+  },
+  "doctor_ok": {
+    "ru": "Проверка окружения пройдена.",
+    "en": "Environment checks passed."
+  },
+  "doctor_failed": {
+    "ru": "Сначала исправь пункты НУЖНО; ничего автоматически не удаляется.",
+    "en": "Resolve the REQUIRED items first; nothing is deleted automatically."
+  },
+  "setup_no_root": {
+    "ru": "Запусти setup без sudo из своего аккаунта: права будут запрошены только для подготовки.",
+    "en": "Run setup without sudo from your own account; privileges are requested only for provisioning."
+  },
+  "setup_no_ci": {
+    "ru": "setup запускается из администраторского аккаунта, не из CI-сессии.",
+    "en": "Run setup from an administrator account, not from the CI session."
+  },
+  "setup_admin": {
+    "ru": "Подготовку должен выполнить администратор Mac; CI-пользователя повышать не нужно.",
+    "en": "A Mac administrator must run setup; do not elevate the CI user."
+  },
+  "runner_directory": {
+    "ru": "actions-runner должен быть собственной папкой CI-пользователя, не ссылкой",
+    "en": "actions-runner must be a directory owned by the CI user, not a symlink"
+  },
+  "architecture_invalid": {
+    "ru": "Неподдерживаемая архитектура",
+    "en": "Unsupported architecture"
+  },
+  "runner_exists": {
+    "ru": "Папка actions-runner уже существует без регистрации. Не перезаписываю: проверь предыдущую установку.",
+    "en": "An unregistered actions-runner directory already exists. Not overwriting it; check the previous installation."
+  },
+  "checksum_failed": {
+    "ru": "SHA-256 runner не совпал: архив не распакован и не запущен",
+    "en": "Runner SHA-256 mismatch: archive was not extracted or executed"
+  },
+  "registration_invalid": {
+    "ru": "Некорректный файл .runner; автоматического удаления регистрации нет",
+    "en": "Invalid .runner file; registration is never deleted automatically"
+  },
+  "registration_foreign": {
+    "ru": "Runner зарегистрирован для другого репозитория; автоматической перерегистрации нет",
+    "en": "Runner belongs to another repository; automatic re-registration is not allowed"
+  },
+  "already_registered": {
+    "ru": "Runner уже зарегистрирован. Для запуска: ci-runner start",
+    "en": "Runner is already registered. To start: ci-runner start"
+  },
+  "unknown_install": {
+    "ru": "Существующая папка runner не создана этим комплектом; ничего не перезаписано",
+    "en": "Existing runner directory was not created by this kit; nothing was overwritten"
+  },
+  "registration_missing": {
+    "ru": "config.sh завершён, но корректная регистрация не найдена",
+    "en": "config.sh finished but no valid registration was found"
+  },
+  "registration_ok": {
+    "ru": "Регистрация завершена. Runner пока OFFLINE; служба не установлена.",
+    "en": "Registration completed. Runner is OFFLINE; no service was installed."
+  },
+  "register_first": {
+    "ru": "Сначала выполни ci-runner register",
+    "en": "Run ci-runner register first"
+  },
+  "listener_running": {
+    "ru": "У этого пользователя уже работает Runner.Listener; второй runner не запущен",
+    "en": "Runner.Listener is already running for this user; a second runner was not started"
+  },
+  "session_running": {
+    "ru": "Другая сессия ci-runner уже запущена",
+    "en": "Another ci-runner session is already running"
+  },
+  "start_help": {
+    "ru": "Runner подключится к GitHub. «Listening for Jobs» означает «Ожидание заданий».\nПосле завершения ВСЕХ заданий нажми Ctrl+C. Во время задания это отменит его.\nНе закрывай крышку/терминал; держи Mac на питании.",
+    "en": "Runner will connect to GitHub. Wait for Listening for Jobs.\nPress Ctrl+C after ALL jobs finish. During a job this cancels it.\nKeep the lid and terminal open, with the Mac connected to power."
+  },
+  "stopping": {
+    "ru": "Жду завершения официального runner…",
+    "en": "Waiting for the official runner to stop…"
+  },
+  "description": {
+    "ru": "Настройка Mac для официального GitHub Actions runner",
+    "en": "Prepare a Mac for the official GitHub Actions runner"
+  },
+  "doctor_help": {
+    "ru": "Проверить всё без установки/регистрации",
+    "en": "Check requirements without installing or registering"
+  },
+  "host_help": {
+    "ru": "Проверка инструментов до создания CI-пользователя",
+    "en": "Check tools before creating the CI user"
+  },
+  "setup_help": {
+    "ru": "Один раз: подготовить отдельного CI-пользователя",
+    "en": "One-time setup of a separate CI user"
+  },
+  "sdk_help": {
+    "ru": "Путь к уже установленному Android SDK",
+    "en": "Path to an existing Android SDK"
+  },
+  "register_help": {
+    "ru": "Скачать проверенный runner и запросить токен регистрации",
+    "en": "Download a verified runner and request a registration token"
+  },
+  "start_command_help": {
+    "ru": "Работать в этом терминале; Ctrl+C после всех заданий",
+    "en": "Run in this terminal; Ctrl+C after all jobs finish"
+  },
+  "config_field": {
+    "ru": "config.json: некорректное поле %s",
+    "en": "config.json: invalid field %s"
+  },
+  "ci_login": {
+    "ru": "Войди под %s; для настройки терминала: sudo -iu %s. Runner нельзя запускать под root/администратором.",
+    "en": "Switch to %s in this terminal: sudo -iu %s. Never run the runner as root or an administrator."
+  },
+  "free_space": {
+    "ru": "Место: %s GiB",
+    "en": "Free space: %s GiB"
+  },
+  "free_space_fix": {
+    "ru": "Освободи минимум %s GiB.",
+    "en": "Free at least %s GiB."
+  },
+  "ci_user": {
+    "ru": "Пользователь: %s, без прав администратора",
+    "en": "User: %s, non-administrator"
+  },
+  "ci_user_fix": {
+    "ru": "Войди под %s; настройку выполняет команда setup.",
+    "en": "Switch to %s; use setup to provision the account."
+  },
+  "command": {
+    "ru": "Команда %s",
+    "en": "Command %s"
+  },
+  "ruby_fix": {
+    "ru": "Под администратором: brew install ruby@%s. Глобальный Ruby менять не нужно.",
+    "en": "As an administrator: brew install ruby@%s. No need to change the global Ruby."
+  },
+  "ios_sdk": {
+    "ru": "iOS SDK / первый запуск: %s",
+    "en": "iOS SDK / first launch: %s"
+  },
+  "xcode_fix": {
+    "ru": "Открой Xcode %s и заверши первый запуск/лицензию.",
+    "en": "Open Xcode %s and complete first launch / license acceptance."
+  },
+  "setup_start": {
+    "ru": "\nПодготовка %s: домашняя папка, отдельный SDK и CLI. Без admin, службы, регистрации в GitHub и запуска заданий.",
+    "en": "\nPreparing %s: home directory, separate SDK and CLI. No administrator access, service, GitHub registration or job execution."
+  },
+  "download": {
+    "ru": "Скачиваю официальный runner %s, %s; проверяю SHA-256…",
+    "en": "Downloading official runner %s, %s; verifying SHA-256…"
+  },
+  "archive_missing": {
+    "ru": "В архиве отсутствует %s",
+    "en": "Archive is missing %s"
+  },
+  "registration_url": {
+    "ru": "\nОткрой https://github.com/%s/settings/actions/runners/new",
+    "en": "\nOpen https://github.com/%s/settings/actions/runners/new"
+  },
+  "error": {
+    "ru": "ОШИБКА: %s",
+    "en": "ERROR: %s"
+  },
+  "keychain_state": {
+    "ru": "Связка ключей по умолчанию: %s",
+    "en": "Default keychain: %s"
+  },
+  "language_invalid": {
+    "ru": "Язык: только ru или en.",
+    "en": "Language must be ru or en."
+  },
+  "commands_title": {
+    "ru": "Команды",
+    "en": "Commands"
+  },
+  "options_title": {
+    "ru": "Параметры",
+    "en": "Options"
+  },
+  "usage": {
+    "ru": "Использование",
+    "en": "Usage"
+  },
+  "help": {
+    "ru": "Показать справку и выйти",
+    "en": "Show help and exit"
+  },
+  "arguments_invalid": {
+    "ru": "Некорректные аргументы. Справка: ci-runner --help",
+    "en": "Invalid arguments. Help: ci-runner --help"
+  },
+  "language_help": {
+    "ru": "Язык интерфейса; по умолчанию ru. Также CI_RUNNER_LANG.",
+    "en": "Interface language; default ru. Also CI_RUNNER_LANG."
+  },
+  "config_help": {
+    "ru": "Путь к конфигурации проекта без секретов",
+    "en": "Path to the project configuration without secrets"
+  },
+  "token_terminal": {
+    "ru": "Для скрытого ввода токена запусти ci-runner register в обычном терминале, без перенаправления ввода.",
+    "en": "For hidden token input, run ci-runner register in an interactive terminal without stdin redirection."
+  },
+  "token_prompt": {
+    "ru": "Токен регистрации GitHub (ввод скрыт): ",
+    "en": "GitHub registration token (input hidden): "
+  },
+  "token_invalid": {
+    "ru": "Введи только токен после --token из Configure: без команды, пробелов, кавычек и скобок. Личный PAT не подходит.",
+    "en": "Enter only the token after --token in Configure: no command, spaces, quotes or braces. A personal PAT will not work."
+  },
+  "token_help": {
+    "ru": "Обнови страницу GitHub и скопируй только токен после --token в Configure. Он действует 1 час. Ввод ниже скрыт; в команду и чат токен не вставляй.",
+    "en": "Refresh the GitHub page and copy only the token after --token in Configure. It expires in 1 hour. Input below is hidden; never paste the token in a command or chat."
+  },
+  "registration_defaults": {
+    "ru": "Группа: стандартная группа GitHub (обычно Default). Имя — автоматически; метка: %s; рабочая папка: _work.",
+    "en": "Group: the GitHub default group (usually Default). Name: automatic; label: %s; work folder: _work."
+  },
+  "registering": {
+    "ru": "Регистрирую runner в GitHub…",
+    "en": "Registering the runner with GitHub…"
+  },
+  "registration_failed": {
+    "ru": "Регистрация не завершена. Runner не запущен; существующие файлы сохранены.",
+    "en": "Registration did not complete. Runner was not started; existing files were preserved."
+  },
+  "registration_auth_hint": {
+    "ru": "GitHub отклонил запрос регистрации. Обнови токен именно этого репозитория и повтори ci-runner register. Если ошибка повторяется, проверь права и ограничения GitHub; код ответа сам по себе не доказывает причину.",
+    "en": "GitHub rejected registration. Refresh the token for this exact repository and retry ci-runner register. If it persists, check GitHub permissions and restrictions; the status code alone does not establish the cause."
+  },
+  "original_output": {
+    "ru": "--- Оригинальный вывод внешней утилиты (без перевода) ---",
+    "en": "--- Original external tool output (not translated) ---"
+  },
+  "cancelled": {
+    "ru": "Операция прервана. Перед повтором проверь состояние runner.",
+    "en": "Operation interrupted. Check the runner state before retrying."
+  },
+  "provision_usage": {
+    "ru": "Используй runner setup; не вызывай provision.sh вручную.",
+    "en": "Use runner setup; do not call provision.sh directly."
+  },
+  "provision_platform": {
+    "ru": "Подготовка требует macOS и sudo.",
+    "en": "Provisioning requires macOS and sudo."
+  },
+  "provision_user": {
+    "ru": "Некорректный CI-пользователь.",
+    "en": "Invalid CI user."
+  },
+  "provision_user_required": {
+    "ru": "Нужен отдельный обычный пользователь.",
+    "en": "A separate non-administrator user is required."
+  },
+  "provision_repo": {
+    "ru": "Некорректный repository.",
+    "en": "Invalid repository."
+  },
+  "provision_label": {
+    "ru": "Некорректный label.",
+    "en": "Invalid label."
+  },
+  "provision_versions": {
+    "ru": "Некорректные версии.",
+    "en": "Invalid versions."
+  },
+  "provision_disk": {
+    "ru": "Некорректный запас места.",
+    "en": "Invalid free-space requirement."
+  },
+  "provision_platforms": {
+    "ru": "Некорректные platforms.",
+    "en": "Invalid platforms."
+  },
+  "provision_owner": {
+    "ru": "Каталог установленного комплекта должен принадлежать root.",
+    "en": "The installed kit directory must be owned by root."
+  },
+  "provision_writable": {
+    "ru": "Каталог комплекта доступен для чужой записи.",
+    "en": "The kit directory is writable by others."
+  },
+  "provision_config_symlink": {
+    "ru": "Установленный конфиг не может быть символической ссылкой.",
+    "en": "Installed config cannot be a symlink."
+  },
+  "provision_other_repo": {
+    "ru": "Этот CI-пользователь уже выделен другому проекту. Укажи другой ci_user.",
+    "en": "This CI user belongs to another project. Choose a different ci_user."
+  },
+  "provision_other_label": {
+    "ru": "Label установленного комплекта другой: автоматической смены регистрации нет.",
+    "en": "The installed kit uses a different label; registration is not changed automatically."
+  },
+  "provision_sdk_missing": {
+    "ru": "Исходный Android SDK не найден.",
+    "en": "Source Android SDK not found."
+  },
+  "provision_sdk_same": {
+    "ru": "Исходный SDK должен отличаться от целевого.",
+    "en": "Source and destination SDK paths must differ."
+  },
+  "provision_password_error": {
+    "ru": "Пользователь не создан. Ошибка 5402 означает, что новый пароль не прошёл требования macOS.",
+    "en": "User was not created. Error 5402 means the new password did not meet macOS requirements."
+  },
+  "provision_account_error": {
+    "ru": "Аккаунт не создан; проверь сообщение sysadminctl и качество нового пароля.",
+    "en": "Account was not created; check the sysadminctl message and the new password."
+  },
+  "provision_uid": {
+    "ru": "Некорректный UID.",
+    "en": "Invalid UID."
+  },
+  "provision_home": {
+    "ru": "Неожиданная домашняя папка.",
+    "en": "Unexpected home directory."
+  },
+  "provision_shell": {
+    "ru": "Для CI-пользователя нужен zsh.",
+    "en": "The CI user must use zsh."
+  },
+  "provision_admin": {
+    "ru": "CI-пользователь не должен состоять в admin; группы автоматически не меняются.",
+    "en": "The CI user must not belong to admin; groups are not changed automatically."
+  },
+  "provision_running": {
+    "ru": "Сначала останови все runners этого CI-пользователя. Ничего не обновлено.",
+    "en": "Stop all runners for this CI user first. Nothing was updated."
+  },
+  "provision_home_owner": {
+    "ru": "Домашняя папка должна принадлежать CI-пользователю.",
+    "en": "The home directory must belong to the CI user."
+  },
+  "provision_sdk_copy": {
+    "ru": "Копирую SDK; .android, сертификаты и личные файлы не копируются.",
+    "en": "Copying SDK; .android, certificates and personal files are not copied."
+  },
+  "provision_marker_symlink": {
+    "ru": "Метка копирования SDK не может быть символической ссылкой.",
+    "en": "SDK copy marker cannot be a symlink."
+  },
+  "provision_sdk_owner": {
+    "ru": "SDK имеет чужого владельца; автоматического chown чужих файлов нет.",
+    "en": "SDK has a different owner; foreign files are not automatically chowned."
+  },
+  "provision_source_symlink": {
+    "ru": "Установленный исходник не может быть символической ссылкой.",
+    "en": "Installed source cannot be a symlink."
+  },
+  "provision_installed": {
+    "ru": "Установка завершена. Проверяю окружение от имени CI-пользователя:",
+    "en": "Installation completed. Checking the environment as the CI user:"
+  },
+  "provision_incomplete": {
+    "ru": "Файлы подготовлены, но есть незавершённые пункты выше. После исправления: ci-runner doctor.",
+    "en": "Files prepared, but some checks above still need attention. After fixing them: ci-runner doctor."
+  },
+  "provision_done": {
+    "ru": "Регистрация и запуск runner не выполнялись. Переключать рабочий стол macOS не нужно.",
+    "en": "Runner was not registered or started. No need to switch macOS desktops."
+  },
+  "provision_source": {
+    "ru": "Нет исходника %s",
+    "en": "Missing source file %s"
+  },
+  "provision_symlink": {
+    "ru": "Отказ от символической ссылки: %s",
+    "en": "Refusing symlink: %s"
+  },
+  "provision_space": {
+    "ru": "Нужно место под копию SDK и %s GiB после копирования; ничего не удалено.",
+    "en": "Space for the SDK copy and %s GiB afterwards is required; nothing was deleted."
+  },
+  "provision_create": {
+    "ru": "Создаю обычного пользователя %s. В запросе macOS «User password» введи НОВЫЙ уникальный непустой пароль.",
+    "en": "Creating non-administrator user %s. At the macOS User password prompt, enter a NEW unique non-empty password."
+  },
+  "provision_component": {
+    "ru": "Отказ от символической ссылки компонента: %s",
+    "en": "Refusing component symlink: %s"
+  },
+  "provision_next": {
+    "ru": "Далее в ЭТОМ ЖЕ терминале: sudo -iu %s, затем ci-runner doctor. Выход обратно: exit.",
+    "en": "Next, in THIS terminal: sudo -iu %s, then ci-runner doctor. Return to your account: exit."
+  },
+  "config_missing": {
+    "ru": "Нет config.json. Из корня репозитория выполни bash tool/runner/runner configure --repository ОРГАНИЗАЦИЯ/РЕПОЗИТОРИЙ.",
+    "en": "config.json is missing. From the repository root run bash tool/runner/runner configure --repository OWNER/REPO, using your real private repository."
+  },
+  "config_placeholder": {
+    "ru": "Замени пример на настоящий OWNER/REPO своего приватного репозитория.",
+    "en": "Replace the example with the real OWNER/REPO of your private repository."
+  },
+  "config_exists": {
+    "ru": "Файл уже существует или является ссылкой; он не изменён. Проверь существующую конфигурацию.",
+    "en": "The configuration file already exists or is a symlink; it was not changed. Review the existing configuration."
+  },
+  "configured": {
+    "ru": "Конфигурация записана в %s. Проверь параметры; из корня репозитория выполни bash tool/runner/runner setup --lang ru.",
+    "en": "Configuration written to %s. Review the settings; from the repository root run bash tool/runner/runner setup."
+  },
+  "configure_help": {
+    "ru": "Создать локальную конфигурацию без sudo и подключения к GitHub",
+    "en": "Create local configuration without sudo or contacting GitHub"
+  },
+  "repository_help": {
+    "ru": "Приватный репозиторий: OWNER/REPO",
+    "en": "Private repository: OWNER/REPO"
+  },
+  "label_help": {
+    "ru": "Метка runner; должна совпадать с workflow",
+    "en": "Runner label; must match your workflow"
+  },
+  "ci_user_help": {
+    "ru": "Отдельный обычный пользователь macOS",
+    "en": "Dedicated standard macOS account"
+  },
+  "platforms_help": {
+    "ru": "Инструменты для Android, iOS или обеих платформ",
+    "en": "Toolchain requirements: Android, iOS or both"
+  },
+  "xcode_version_help": {
+    "ru": "Требуемая версия Xcode для iOS",
+    "en": "Required Xcode version for iOS"
+  },
+  "ruby_version_help": {
+    "ru": "Требуемая версия Ruby",
+    "en": "Required Ruby version"
+  }
+}

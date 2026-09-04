@@ -1,0 +1,59 @@
+name: Manual Mac smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Execution machine (no automatic fallback)
+        required: true
+        default: github-hosted
+        type: choice
+        options: [github-hosted, self-hosted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-mac-smoke-${{ inputs.runner }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    # Never attach a personal Mac to public/unreviewed PR jobs.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.repository.private == true &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ${{ fromJSON(inputs.runner == 'self-hosted' && '["self-hosted","macOS","local-macos"]' || '["macos-15"]') }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check the local account before checkout
+        if: inputs.runner == 'self-hosted'
+        run: |
+          test "$(uname -s)" = Darwin
+          test "$(id -u)" -ne 0
+          if id -Gn | tr ' ' '\n' | grep -qx admin; then
+            echo 'Use a dedicated standard CI account, not an administrator.' >&2
+            exit 1
+          fi
+          # Change ci if you configured another dedicated account.
+          test "$(id -un)" = ci
+
+      - name: Check out the exact reviewed revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show where this job runs
+        env:
+          RUNNER_KIND: ${{ runner.environment }}
+          RUNNER_DISPLAY_NAME: ${{ runner.name }}
+        run: |
+          printf 'Runner: %s (%s)\n' "$RUNNER_DISPLAY_NAME" "$RUNNER_KIND"
+          uname -sm
+          id -un
+          git rev-parse HEAD
+          echo 'Environment smoke passed; no application was built or signed.'

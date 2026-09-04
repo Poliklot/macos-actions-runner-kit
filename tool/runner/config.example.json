@@ -1,0 +1,17 @@
+{
+  "repository": "example/mobile-app",
+  "label": "local-macos",
+  "ci_user": "ci",
+  "platforms": [
+    "android",
+    "ios"
+  ],
+  "xcode_version": "26.3",
+  "ruby_version": "3.3",
+  "minimum_free_gib": 20,
+  "runner_version": "2.337.0",
+  "runner_sha256": {
+    "arm64": "5a2cd92908a93d7276a194e1de6008099f3e7946f3f8e14aa7a1a7b4a31fdec2",
+    "x64": "d383f505d7ed041b1873ab68c35dd766fc093f2252330f95bb427be8f2c6dcfc"
+  }
+}

@@ -1,0 +1,25 @@
+#!/bin/bash
+set -Eeuo pipefail
+directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# A stock Xcode Python can be too old for tarfile's safe extraction filter.
+for python in /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+  if command -v "$python" >/dev/null 2>&1 && "$python" -c 'import sys; sys.exit(sys.version_info < (3, 12))' 2>/dev/null; then
+    exec "$python" "$directory/runner.py" "$@"
+  fi
+done
+# Python is unavailable, so the normal shared catalog cannot be loaded yet.
+language=${CI_RUNNER_LANG:-}
+if [[ -z "$language" && -f "$directory/language" ]]; then language=$(cat "$directory/language"); fi
+next_language=false
+for argument in "$@"; do
+  if [[ "$next_language" == true ]]; then language=$argument; next_language=false
+  elif [[ "$argument" == --lang ]]; then next_language=true
+  elif [[ "$argument" == --lang=* ]]; then language=${argument#--lang=}
+  fi
+done
+if [[ "$language" == ru ]]; then
+  echo 'Нужен Python 3.12+: установи через Homebrew командой brew install python.' >&2
+else
+  echo 'Python 3.12+ is required. Install it with Homebrew: brew install python.' >&2
+fi
+exit 1

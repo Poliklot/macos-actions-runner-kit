@@ -1,0 +1,22 @@
+# Machine/project settings and generated files are never distribution inputs.
+tool/runner/config.json
+tool/runner/language
+__pycache__/
+*.py[cod]
+.DS_Store
+dist/
+.venv/
+actions-runner/
+.runner
+.credentials*
+.env
+.env.*
+*.p12
+*.p8
+*.pem
+*.key
+*.jks
+*.keystore
+*.mobileprovision
+*.keychain*
+*.log
