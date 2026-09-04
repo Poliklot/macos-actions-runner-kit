@@ -538,5 +538,13 @@
   "ruby_version_help": {
     "ru": "Требуемая версия Ruby",
     "en": "Required Ruby version"
+  },
+  "ios_build_destination": {
+    "ru": "Xcode: доступна сборка для iOS-устройства",
+    "en": "Xcode: generic iOS device build destination is available"
+  },
+  "ios_platform_fix": {
+    "ru": "В Xcode %s открой Settings → Components и установи поддержку iOS. Номера SDK недостаточно; затем повтори doctor.",
+    "en": "In Xcode %s, open Settings → Components and install iOS platform support. The SDK version alone is insufficient; rerun doctor."
   }
 }

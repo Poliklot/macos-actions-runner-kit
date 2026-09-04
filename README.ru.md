@@ -52,6 +52,9 @@ bash runner setup --lang ru
 > Xcode 26.3 для iOS; полный Android SDK и JDK для Android.
 > Место — под копию SDK **и ещё 20 GiB**. Недостающие компоненты покажет установщик.
 > Xcode, принятие лицензии Apple и установку недостающих инструментов выполняет владелец Mac.
+> Для iOS установи также **Platform Support** в Xcode → Settings → Components.
+> Установленного Simulator или номера SDK недостаточно: `doctor` проверяет настоящий
+> iOS build destination на временном проекте без подписи.
 
 ## 4. Подключи — один раз
 

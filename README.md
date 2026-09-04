@@ -52,6 +52,9 @@ The installer prepares the account, its own Android SDK and the `ci-runner` comm
 > Xcode 26.3 for iOS; full Android SDK and JDK for Android.
 > Allow space for the SDK copy **plus 20 GiB**. The installer reports missing tools;
 > it does not install Xcode, accept Apple licences or make your account an administrator.
+> For iOS, also install **Platform Support** in Xcode → Settings → Components.
+> An installed Simulator or reported SDK version is not enough: `doctor` resolves a
+> real generic iOS build destination using a disposable project without signing.
 
 ## 4. Connect — once
 

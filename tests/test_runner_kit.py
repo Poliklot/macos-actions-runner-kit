@@ -179,6 +179,9 @@ class LifecycleTests(unittest.TestCase):
         self.target = self.home / "actions-runner"
         self.target.mkdir()
         (self.target / ".kit-download.json").write_text("{}")
+        probe = patch.object(kit, "ios_platform_available", return_value=True)
+        self.platform_probe = probe.start()
+        self.addCleanup(probe.stop)
 
     def test_admin_cannot_register_or_start(self):
         with patch.object(kit, "current_ci", return_value=False), patch.object(kit, "run") as run:
@@ -260,6 +263,28 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("workflow сам управляет временной связкой", report.getvalue())
         self.assertTrue(report.getvalue().endswith("Проверка окружения пройдена.\n"))
         self.assertNotIn("Первый раз войди на рабочий стол", report.getvalue())
+
+    def test_sdk_metadata_without_build_destination_does_not_pass_doctor(self):
+        cfg = dict(self.cfg, platforms=["ios"])
+        report = io.StringIO()
+        self.platform_probe.return_value = False
+        def output(args, env):
+            if args[0] == "ruby":
+                return True, "3.3.12"
+            if args[0] == "xcodebuild" and args[1] == "-version":
+                return True, "Xcode 26.3\nBuild version 17C529"
+            return True, "26.2"
+        with patch.object(kit.Path, "home", return_value=self.home), \
+                patch.object(kit, "current_ci", return_value=True), \
+                patch.object(kit, "default_keychain", return_value=[]), \
+                patch.object(kit.platform, "system", return_value="Darwin"), \
+                patch.object(kit.platform, "machine", return_value="arm64"), \
+                patch.object(kit.shutil, "which", return_value="/usr/bin/tool"), \
+                patch.object(kit.shutil, "disk_usage", return_value=SimpleNamespace(free=30 * 1024**3)), \
+                patch.object(kit, "output", side_effect=output), redirect_stdout(report):
+            self.assertFalse(kit.doctor(cfg))
+        self.assertIn("установи поддержку iOS", report.getvalue())
+        self.assertNotIn("Проверка окружения пройдена.", report.getvalue())
 
     def test_unavailable_keychain_api_blocks_doctor(self):
         report = io.StringIO()

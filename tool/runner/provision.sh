@@ -22,7 +22,7 @@ done
 source "$kit/messages.sh"
 fail() { msg error "$(msg "$@")" >&2; exit 1; }
 [[ $(id -u) == 0 ]] || fail provision_platform
-for name in runner runner.py keychain_state.py provision.sh i18n.py messages.json messages.sh; do
+for name in runner runner.py keychain_state.py ios_platform_probe.py provision.sh i18n.py messages.json messages.sh; do
   [[ -f "$kit/$name" && ! -L "$kit/$name" ]] || fail provision_source "$name"
 done
 field() { /usr/bin/plutil -extract "$1" raw -o - "$configuration"; }
@@ -129,7 +129,7 @@ fi
 # Code installed outside the checkout is root-owned and can be read by ci even
 # when the administrator's personal home directory is private.
 /usr/bin/install -d -o root -g wheel -m 755 "$install_parent" "$installed"
-for name in runner runner.py keychain_state.py provision.sh i18n.py messages.json messages.sh; do
+for name in runner runner.py keychain_state.py ios_platform_probe.py provision.sh i18n.py messages.json messages.sh; do
   [[ ! -L "$installed/$name" ]] || fail provision_source_symlink
   /usr/bin/install -o root -g wheel -m 644 "$kit/$name" "$installed/$name"
 done

@@ -27,6 +27,7 @@ import urllib.request
 import uuid
 
 from keychain_state import default_keychain
+from ios_platform_probe import available as ios_platform_available
 import i18n
 from i18n import tr
 
@@ -165,6 +166,9 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
         sdk_ok, sdk_version = output(["xcrun", "--sdk", "iphoneos", "--show-sdk-version"], env)
         check(ok and sdk_ok, tr('ios_sdk', sdk_version or tr('not_ready')),
               tr('xcode_fix', cfg["xcode_version"]))
+        # SDK metadata can exist without installed/enabled platform support.
+        check(ok and sdk_ok and ios_platform_available(env), tr('ios_build_destination'),
+              tr('ios_platform_fix', cfg["xcode_version"]))
         if not host and current_ci(cfg):
             try:
                 paths = default_keychain()
