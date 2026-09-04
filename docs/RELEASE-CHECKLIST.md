@@ -15,7 +15,7 @@ The maintainer approved publication and deferred the second-Mac check on 2026-09
 ## Automated evidence
 
 - [x] `bash scripts/check.sh` and static checks pass locally on Apple Silicon, including a clean source archive.
-- [ ] Hosted CI passes without repository secrets or any self-hosted runner.
+- [x] Hosted CI passes without repository secrets or any self-hosted runner; see [evidence](VERIFICATION.md).
 
 ## Deferred acceptance — required before broader readiness claims
 

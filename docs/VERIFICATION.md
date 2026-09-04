@@ -1,7 +1,7 @@
-# Local verification — 2026-09-04
+# Verification — 2026-09-04
 
-Environment: macOS / Apple Silicon, Python 3.14.0. This document records local evidence,
-not a successful public CI run or independent security certification.
+Local environment: macOS / Apple Silicon, Python 3.14.0. This document records tests,
+not independent security certification or a verified end-to-end installation on another Mac.
 
 | Check | Result |
 |---|---|
@@ -14,7 +14,12 @@ not a successful public CI run or independent security certification.
 | Deterministic packaging / traversal, symlink and runtime-file rejection | Covered by tests |
 | Standalone configure in a temporary directory, EN/RU | Passed without sudo/network/account creation |
 | Real installed standalone setup / signed release / second Mac / Intel | Not performed |
-| Linux and hosted CI matrix | Defined, not yet executed |
+| GitHub-hosted macOS 15 / Python 3.14.7 | 70 tests passed; source packaging passed |
+| GitHub-hosted Ubuntu 24.04 / Python 3.12.14 | 66 passed, 4 macOS-only checks skipped; source packaging passed |
+
+Hosted evidence: [Check the helper, run 33874038227](https://github.com/Poliklot/macos-actions-runner-kit/actions/runs/33874038227),
+commit `611049ff0a4b28ad9f4865bf004592e6e666d616`. Both jobs succeeded on GitHub-hosted runners.
+The public repository has no registered personal runner; workflow token permissions are read-only.
 
 Mac-only tests include a read-only Keychain comparison and a real foreground SIGINT lifecycle
 with a dummy runner. Download/registration/provisioning scenarios otherwise use fixtures and
