@@ -3,6 +3,23 @@
 Local environment: macOS / Apple Silicon, Python 3.14.0. This document records tests,
 not independent security certification or a verified end-to-end installation on another Mac.
 
+## Pre-release verification: actual iOS platform readiness
+
+The SDK version command reported success while a real generic iOS device destination
+was unavailable. A temporary, dependency-free Xcode project now checks that destination
+in `doctor`; the installer and allowlisted source archive include the probe.
+
+- 74 offline tests passed, including missing-platform rejection despite valid SDK metadata.
+- A freshly extracted source archive without Git metadata or workload config passed the same 74 tests.
+- Shell/Python syntax, ShellCheck, actionlint (workflow and manual example) passed; Gitleaks found no leaks.
+- The real probe rejected missing support in Xcode 26.3 and succeeded after iOS Platform Support
+  was installed through Xcode Settings → Components. Installing only a simulator runtime was insufficient.
+- This verifies destination resolution, not signing or App Store delivery. No second-Mac or Intel
+  acceptance was performed. The local checks above do not constitute hosted CI evidence;
+  release-specific hosted checks are linked in the release notes.
+
+## Previously published baseline
+
 | Check | Result |
 |---|---|
 | Offline unit/regression suite | 70 tests passed |
