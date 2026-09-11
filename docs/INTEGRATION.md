@@ -15,7 +15,20 @@ Do not register a personal Mac with the public helper repository. Its own CI use
 This executes a checkout and environment smoke check, **not an app build or signed release**.
 The cloud option remains explicit/default; an offline local runner queues instead of falling back to a paid machine.
 
-## Existing Flutter workflows
+## Node/backend and other stacks
+
+Select a [workload profile](WORKLOADS.md) before setup. For Node, adapt
+[manual-node-ci.yml](../examples/manual-node-ci.yml): account, label, Node version,
+locked installation and test/build commands must match the private project. For a backend,
+provision Docker separately under the CI account and verify disposable PostgreSQL tests,
+image architecture and cleanup. The kit supplies no application-specific deployment.
+
+For Python/Go/Rust/infra, use `generic` plus `--require-tool` or selected capabilities;
+start from the manual smoke example and add the project's reviewed commands. Exact
+version installation is the workflow's responsibility, not a root-run config hook.
+One CI account/registration per repository remains mandatory, even on the same Mac.
+
+## Existing workflows (including Flutter)
 
 - Add an explicit `runner` choice and route **every** required job, including gates and notifications.
 - Allow local jobs only on trusted manual refs; do not route `pull_request` / `pull_request_target` to this Mac.
@@ -36,8 +49,8 @@ Standard users can still reach the network and read files their permissions allo
 Copy the complete `tool/runner` source directory, excluding local config/language/cache files.
 Include this helper's `LICENSE` with the vendored source, preserving the copyright and permission notice.
 The embedded entry point is `bash tool/runner/runner`, not the standalone root `bash runner`.
-Developers can run `configure --repository OWNER/REPO`, or the maintainer can supply a reviewed
-non-secret `config.json` consistently for the team. Never include a token/password in it.
+Developers can run `configure --repository OWNER/REPO --requirements /absolute/ci-requirements.json`
+with the project's reviewed portable manifest. Keep machine identity in local config, not the manifest. Never include a token/password in it.
 Document the actual clone URL, branch, directory, CI user and workflow fields for your team.
 
 Apply upstream source updates through a reviewed diff, then run tests and update installed kits

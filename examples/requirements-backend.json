@@ -1,0 +1,7 @@
+{
+  "capabilities": ["docker", "node"],
+  "versions": {"node": "24"},
+  "required_tools": ["terraform"],
+  "tool_versions": {"terraform": "1.14"},
+  "minimum_free_gib": 40
+}

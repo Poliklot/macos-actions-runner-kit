@@ -34,7 +34,7 @@ class LocalizationTests(unittest.TestCase):
                     self.assertIsNone(re.search('[а-яА-ЯёЁ]', value), key)
 
     def test_all_python_and_shell_message_ids_exist(self):
-        for name in ('runner.py', 'i18n.py'):
+        for name in ('runner.py', 'i18n.py', 'configuration.py'):
             tree = ast.parse((kit.ROOT / name).read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'tr':

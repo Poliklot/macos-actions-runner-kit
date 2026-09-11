@@ -15,6 +15,15 @@
 > Intel и полный подписанный релиз для отдельного комплекта пока не проверены.
 > [Что проверено](docs/VERIFICATION.md) · [Что осталось](docs/RELEASE-CHECKLIST.md).
 
+## Не только mobile
+
+Основа — **файл требований проекта**, а не набор готовых стеков: любые CLI-инструменты,
+их версии и пути внутри CI-аккаунта. Docker/SDK включаются отдельно; профили — лишь сокращения.
+Команды сборки и установки зависимостей остаются в GitHub workflow.
+[Формат, примеры и обновление](docs/WORKLOADS.md).
+
+Ниже — быстрый пример для mobile; вместо него можно использовать свой файл требований.
+
 ## 1. Скачай и открой папку
 
 На странице этого репозитория: **Code → Download ZIP**, затем распакуй архив.
@@ -32,11 +41,17 @@ ls runner tool/runner/config.example.json
 Замени `OWNER/REPO` на проект, **который будешь собирать**, не на публичный репозиторий помощника:
 
 ```bash
-bash runner configure --repository OWNER/REPO --lang ru
+bash runner configure --repository OWNER/REPO --profile mobile --lang ru
 ```
 
 Создастся локальный `tool/runner/config.json`, исключённый из Git. Секреты туда не нужны.
-Только Android: добавь `--platforms android`; только iOS: `--platforms ios`.
+Для одной платформы: `--profile android` или `--profile ios`; без мобильных SDK: `--profile generic`.
+
+Вместо `--profile mobile` можно использовать свой проверенный файл требований:
+
+```bash
+bash runner configure --repository OWNER/REPO --requirements /absolute/ci-requirements.json
+```
 
 ## 3. Подготовь Mac
 
@@ -45,12 +60,12 @@ bash runner setup --lang ru
 ```
 
 В запросе sudo введи пароль своего Mac. Если создаётся пользователь `ci`, задай ему
-отдельный пароль. Скрипт подготовит аккаунт, отдельную копию Android SDK и команду `ci-runner`.
+отдельный пароль. Скрипт подготовит аккаунт и команду `ci-runner`; Android SDK копируется только при его выборе.
 
 > [!NOTE]
-> Нужен разработческий Mac: Python 3.12+, Ruby 3.3, `git`, `curl`, `jq`, `gh`;
+> Нужен разработческий Mac: Python 3.12+, `git`, `curl`, `jq`, `gh`; Ruby 3.3 для mobile-профилей;
 > Xcode 26.3 для iOS; полный Android SDK и JDK для Android.
-> Место — под копию SDK **и ещё 20 GiB**. Недостающие компоненты покажет установщик.
+> Нужно **20 GiB свободно** и место под копию SDK, если выбран Android. Недостающие компоненты покажет установщик.
 > Xcode, принятие лицензии Apple и установку недостающих инструментов выполняет владелец Mac.
 > Для iOS установи также **Platform Support** в Xcode → Settings → Components.
 > Установленного Simulator или номера SDK недостаточно: `doctor` проверяет настоящий
@@ -93,3 +108,7 @@ ci-runner start
 
 Комплект устанавливает runner, **но не настраивает универсальную подпись и доставку Flutter**.
 Команды проекта, секреты и их очистка остаются ответственностью владельца workflow.
+
+Для backend выбери `--profile backend` и подключи [пример Node workflow](examples/manual-node-ci.yml).
+Старые mobile-конфиги и команды поддерживаются. Новые профили не включают автоматические
+PR-задания и не устанавливают Docker. Обновляй установленный комплект только после остановки всех jobs.

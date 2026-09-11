@@ -1,0 +1,6 @@
+{
+  "required_tools": ["python3", "rustc", "cargo"],
+  "tool_versions": {"python3": "3.12", "rustc": "1.90"},
+  "path_prepend": ["${HOME}/.cargo/bin", "/opt/homebrew/opt/python@3.12/libexec/bin"],
+  "minimum_free_gib": 30
+}

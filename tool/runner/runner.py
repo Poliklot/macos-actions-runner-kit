@@ -18,6 +18,7 @@ import platform
 import pwd
 import re
 import shutil
+import shlex
 import socket
 import subprocess
 import sys
@@ -29,11 +30,11 @@ import uuid
 from keychain_state import default_keychain
 from ios_platform_probe import available as ios_platform_available
 import i18n
+import configuration
+import workloads
 from i18n import tr
 
 ROOT = Path(__file__).resolve().parent
-FIELDS = {"repository", "label", "ci_user", "platforms", "xcode_version", "ruby_version",
-          "minimum_free_gib", "runner_version", "runner_sha256"}
 
 
 def config(path: Path) -> dict:
@@ -43,29 +44,7 @@ def config(path: Path) -> dict:
 
 
 def validate_config(value: dict) -> dict:
-    if not isinstance(value, dict) or set(value) != FIELDS:
-        raise ValueError(tr('config_fields'))
-    patterns = {"repository": r"[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+",
-                "label": r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}",
-                "ci_user": r"[a-z][a-z0-9_]{0,30}",
-                "xcode_version": r"[0-9]+\.[0-9]+", "ruby_version": r"[0-9]+\.[0-9]+",
-                "runner_version": r"[0-9]+\.[0-9]+\.[0-9]+"}
-    for name, pattern in patterns.items():
-        if not isinstance(value[name], str) or not re.fullmatch(pattern, value[name]):
-            raise ValueError(tr('config_field', name))
-    if value["repository"].split("/")[1] in (".", ".."):
-        raise ValueError(tr('repository_invalid'))
-    if value["ci_user"] in ("root", "admin", "daemon", "nobody", "guest"):
-        raise ValueError(tr('ci_required'))
-    if value["platforms"] not in (["android"], ["ios"], ["android", "ios"]):
-        raise ValueError(tr('platforms_invalid'))
-    if type(value["minimum_free_gib"]) is not int or not 20 <= value["minimum_free_gib"] <= 1000:
-        raise ValueError(tr('disk_invalid'))
-    hashes = value["runner_sha256"]
-    if not isinstance(hashes, dict) or set(hashes) != {"arm64", "x64"} or any(
-            not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{64}", v) for v in hashes.values()):
-        raise ValueError(tr('hashes_required'))
-    return value
+    return configuration.validate(value)
 
 
 def configure(args):
@@ -77,9 +56,25 @@ def configure(args):
     if args.repository.lower() in ('owner/repo', 'your-org/your-repo', 'example/mobile-app'):
         raise ValueError(tr('config_placeholder'))
     value = config(ROOT / 'config.example.json')
-    value.update(repository=args.repository, label=args.label, ci_user=args.ci_user,
-                 platforms=['android', 'ios'] if args.platforms == 'all' else [args.platforms],
-                 xcode_version=args.xcode_version, ruby_version=args.ruby_version)
+    value.update(repository=args.repository, label=args.label, ci_user=args.ci_user)
+    custom = args.profile is not None or args.capability or args.require_tool or args.node_version is not None
+    if args.requirements is not None:
+        if custom or args.platforms is not None or args.ruby_version is not None or args.xcode_version is not None:
+            raise ValueError(tr('requirements_conflict'))
+        value = configuration.with_requirements(value, json.loads(args.requirements.read_text(encoding="utf-8-sig")))
+    elif custom:
+        if args.platforms is not None:
+            raise ValueError(tr('profile_platform_conflict'))
+        value = configuration.for_profile(value, args.profile or 'generic', extra=args.capability,
+                                          tools=args.require_tool, node=args.node_version,
+                                          ruby=args.ruby_version or "3.3", xcode=args.xcode_version or "26.3")
+        if ((args.ruby_version is not None and "ruby" not in value["capabilities"])
+                or (args.xcode_version is not None and "ios" not in value["capabilities"])):
+            raise ValueError(tr("versions_invalid"))
+    else:
+        # Preserve the original CLI contract and existing mobile installations.
+        value.update(platforms=['android', 'ios'] if args.platforms in (None, 'all') else [args.platforms],
+                     xcode_version=args.xcode_version or "26.3", ruby_version=args.ruby_version or "3.3")
     validate_config(value)
     # O_EXCL refuses existing files and symlinks; no overwrite/force option.
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
@@ -89,39 +84,67 @@ def configure(args):
         raise ValueError(tr('config_exists')) from None
     with os.fdopen(fd, 'w', encoding='utf-8') as output_file:
         output_file.write(json.dumps(value, indent=2) + '\n')
-    print(tr('configured', args.config))
+    print(tr('configured', args.config, shlex.quote(str(args.config.resolve()))))
     return 0
 
 
-def run(args, *, env=None, cwd=None, capture=True):
+def run(args, *, env=None, cwd=None, capture=True, timeout=None):
     return subprocess.run(args, env=env, cwd=cwd, text=True, capture_output=capture,
-                          check=False)
+                          check=False, timeout=timeout)
 
 
 def output(args, env=None):
     try:
-        result = run(args, env=env)
+        result = run(args, env=env, timeout=15)
         return result.returncode == 0, result.stdout.strip()
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return False, ""
 
 
+# Only these fixed variables may be exported by shell-env. Never print inherited secrets.
+MANAGED_VARS = ("PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT", "DEVELOPER_DIR", "DOCKER_CONFIG")
+DOCKER_OVERRIDES = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH")
+
+
 def environment(cfg: dict, home: Path, sdk: Path | None = None) -> dict:
-    # Never inherit overrides such as --replace, --pat or a stale token.
+    cfg = configuration.normalized(cfg)
+    caps, versions = cfg["capabilities"], cfg["versions"]
     env = {key: value for key, value in os.environ.items()
            if not key.upper().startswith("ACTIONS_RUNNER_INPUT_")}
-    version = cfg["ruby_version"]
-    sdk = sdk or home / "Library/Android/sdk"
-    env.update(HOME=str(home), ANDROID_HOME=str(sdk), ANDROID_SDK_ROOT=str(sdk))
-    search = [home / "bin", Path(f"/opt/homebrew/opt/ruby@{version}/bin"),
-              Path(f"/usr/local/opt/ruby@{version}/bin"), Path("/opt/homebrew/bin"),
-              Path("/opt/homebrew/sbin"), sdk / "platform-tools", sdk / "emulator",
-              sdk / "cmdline-tools/latest/bin"]
+    for key in (*MANAGED_VARS, *DOCKER_OVERRIDES):
+        env.pop(key, None)
+    env["HOME"] = str(home)
+    search = [home / "bin"]
+    search.extend(Path(p.replace("${HOME}", str(home), 1)) for p in cfg.get("path_prepend", []))
+    if "ruby" in caps:
+        version = versions["ruby"]
+        search.extend([Path(f"/opt/homebrew/opt/ruby@{version}/bin"),
+                       Path(f"/usr/local/opt/ruby@{version}/bin")])
+    if "node" in caps and "node" in versions:
+        version = versions["node"]
+        search.extend([Path(f"/opt/homebrew/opt/node@{version}/bin"),
+                       Path(f"/usr/local/opt/node@{version}/bin")])
+    search.extend([Path("/opt/homebrew/bin"), Path("/opt/homebrew/sbin")])
+    if "android" in caps:
+        sdk = sdk or home / "Library/Android/sdk"
+        env.update(ANDROID_HOME=str(sdk), ANDROID_SDK_ROOT=str(sdk))
+        search.extend([sdk / "platform-tools", sdk / "emulator", sdk / "cmdline-tools/latest/bin"])
     env["PATH"] = ":".join(map(str, search)) + ":/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    if "ios" in cfg["platforms"]:
-        xcode = Path(f'/Applications/Xcode_{cfg["xcode_version"]}.app/Contents/Developer')
+    if "ios" in caps:
+        xcode = Path(f'/Applications/Xcode_{versions["xcode"]}.app/Contents/Developer')
         env["DEVELOPER_DIR"] = str(xcode if xcode.is_dir() else Path("/Applications/Xcode.app/Contents/Developer"))
+    if "docker" in caps:
+        env["DOCKER_CONFIG"] = str(home / ".docker")
     return env
+
+
+def shell_environment(cfg: dict, home: Path) -> str:
+    env = environment(cfg, home)
+    lines = ["# Managed CI-only environment; no credentials."]
+    lines.extend("unset " + key for key in DOCKER_OVERRIDES)
+    lines.extend("export " + key + "=" + shlex.quote(env[key]) if key in env else "unset " + key
+                 for key in MANAGED_VARS)
+    return "\n".join(lines) + "\n"
 
 
 def current_ci(cfg: dict) -> bool:
@@ -137,8 +160,16 @@ def require_ci(cfg: dict):
 
 
 def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
+    cfg = configuration.normalized(cfg)
+    caps, versions = cfg["capabilities"], cfg["versions"]
     home = Path.home()
+    # Project-specific PATH and version probes belong to CI, not the owner's login.
+    if host:
+        cfg = dict(cfg, path_prepend=[])
     env = environment(cfg, home, sdk)
+    for path in cfg.get("path_prepend", []):
+        if not workloads.path_ready(Path(path.replace("${HOME}", str(home), 1)), home):
+            raise ValueError(tr('tool_path_fix'))
     rows = []
 
     def check(ok, title, fix):
@@ -151,24 +182,41 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
     if not host:
         check(current_ci(cfg), tr('ci_user', cfg["ci_user"]),
               tr('ci_user_fix', cfg["ci_user"]))
-    for tool in ("python3", "ruby", "git", "curl", "jq", "gh"):
+    for tool in dict.fromkeys(["python3", "git", "curl", "jq", "gh",
+                               *(cfg["required_tools"] if not host else [])]):
         check(shutil.which(tool, path=env["PATH"]), tr('command', tool),
               tr('tools_install'))
-    ok, version = output(["ruby", "-e", "print RUBY_VERSION"], env)
-    check(ok and version.startswith(cfg["ruby_version"] + "."), f"Ruby: {version or tr('missing')}",
-          tr('ruby_fix', cfg["ruby_version"]))
-    if "ios" in cfg["platforms"]:
+    if not host:
+        for tool, version in cfg.get("tool_versions", {}).items():
+            # Never execute manifest-selected tools under the owner's account or root.
+            check(current_ci(cfg) and workloads.tool_ready(output, env, tool, version),
+                  tool + " " + version, tr('tool_version_fix'))
+    if "ruby" in caps:
+        ok, version = output(["ruby", "-e", "print RUBY_VERSION"], env)
+        check(ok and version.startswith(versions["ruby"] + "."), f"Ruby: {version or tr('missing')}",
+              tr('ruby_fix', versions["ruby"]))
+    if "node" in caps:
+        check(workloads.node_ready(output, env, versions.get("node")),
+              "Node.js" + (" " + versions["node"] if "node" in versions else ""), tr('node_fix'))
+        check(output(["npm", "--version"], env)[0], "npm", tr('node_fix'))
+    if "docker" in caps:
+        if host:
+            # Setup must not depend on (or contact) the owner's personal daemon.
+            check(shutil.which("docker", path=env["PATH"]), "Docker CLI", tr('docker_fix'))
+        else:
+            check(workloads.docker_ready(output, env), tr('docker_daemon'), tr('docker_fix'))
+    if "ios" in caps:
         ok, version = output(["xcodebuild", "-version"], env)
-        check(ok and version.splitlines()[0:1] == [f'Xcode {cfg["xcode_version"]}'],
-              f'Xcode {cfg["xcode_version"]}',
-              f'https://developer.apple.com/download/all/?q=Xcode%20{cfg["xcode_version"]}')
+        check(ok and version.splitlines()[0:1] == [f'Xcode {versions["xcode"]}'],
+              f'Xcode {versions["xcode"]}',
+              f'https://developer.apple.com/download/all/?q=Xcode%20{versions["xcode"]}')
         ok, _ = output(["xcodebuild", "-checkFirstLaunchStatus"], env)
         sdk_ok, sdk_version = output(["xcrun", "--sdk", "iphoneos", "--show-sdk-version"], env)
         check(ok and sdk_ok, tr('ios_sdk', sdk_version or tr('not_ready')),
-              tr('xcode_fix', cfg["xcode_version"]))
+              tr('xcode_fix', versions["xcode"]))
         # SDK metadata can exist without installed/enabled platform support.
         check(ok and sdk_ok and ios_platform_available(env), tr('ios_build_destination'),
-              tr('ios_platform_fix', cfg["xcode_version"]))
+              tr('ios_platform_fix', versions["xcode"]))
         if not host and current_ci(cfg):
             try:
                 paths = default_keychain()
@@ -178,7 +226,7 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
                 check(ok, tr("keychain_state", detail), tr('keychain_error'))
             except OSError as error:
                 check(False, "Keychain API", str(error))
-    if "android" in cfg["platforms"]:
+    if "android" in caps:
         sdk_path = Path(env["ANDROID_HOME"])
         required = ["platform-tools/adb", "emulator/emulator", "cmdline-tools/latest/bin/sdkmanager",
                     "cmdline-tools/latest/bin/avdmanager"]
@@ -195,7 +243,7 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
             check(ok, "SDK Manager / Java", tr('jdk_required'))
             ok, _ = output([str(sdk_path / "emulator/emulator"), "-accel-check"], env)
             check(ok, tr('emulator_acceleration'), tr('emulator_fix'))
-    if not host:
+    if not host and ("android" in caps or "ios" in caps):
         # Detect recovery journals left by this repository's existing signing helper.
         journals = list((home / "Library/Caches").glob("*-signing-state"))
         check(not journals, tr('signing_clean'),
@@ -206,6 +254,8 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
             print(f"{status}  {title}")
             if not ok:
                 print(f"       {fix}")
+        if host and "docker" in caps:
+            print(tr('docker_ci_only'))
         print("\n" + (tr('doctor_ok')
                         if all(r[0] for r in rows) else tr('doctor_failed')))
     return all(row[0] for row in rows)
@@ -218,15 +268,24 @@ def setup(cfg, config_path, source_sdk):
         raise ValueError(tr('setup_no_ci'))
     if "admin" not in [grp.getgrgid(g).gr_name for g in os.getgroups()]:
         raise ValueError(tr('setup_admin'))
-    sdk = Path(source_sdk or os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
-               or Path.home() / "Library/Android/sdk").expanduser().resolve()
+    cfg = configuration.normalized(cfg)
+    if source_sdk is not None and "android" not in cfg["capabilities"]:
+        raise ValueError(tr('sdk_not_selected'))
+    sdk = (Path(source_sdk or os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+                or Path.home() / "Library/Android/sdk").expanduser().resolve()
+           if "android" in cfg["capabilities"] else Path("/"))
     if not doctor(cfg, host=True, sdk=sdk):
         return 1
     print(tr('setup_start', cfg["ci_user"]), flush=True)
-    # CI subprocesses must not inherit a checkout inside the administrator's
-    # private home. All input paths are absolute; / is accessible to both users.
-    result = run(["sudo", "/bin/bash", str(ROOT / "provision.sh"), str(ROOT),
-                  str(config_path.resolve()), str(sdk), i18n.LANGUAGE], cwd="/", capture=False)
+    # Freeze validated settings for this setup; never rewrite the legacy source.
+    # sudo runs outside the administrator's private checkout. Only known source
+    # files are installed; configuration contains no executable hooks.
+    with tempfile.TemporaryDirectory(prefix="ci-runner-config-") as temporary:
+        snapshot = Path(temporary) / "config.json"
+        snapshot.write_text(json.dumps(cfg) + "\n")
+        snapshot.chmod(0o600)
+        result = run(["sudo", "/bin/bash", str(ROOT / "provision.sh"), str(ROOT),
+                      str(snapshot.resolve()), str(sdk), i18n.LANGUAGE], cwd="/", capture=False)
     return result.returncode
 
 
@@ -387,9 +446,16 @@ def main(argv=None):
     c.add_argument("--repository", required=True, help=tr('repository_help'))
     c.add_argument("--label", default="local-macos", help=tr('label_help'))
     c.add_argument("--ci-user", default="ci", help=tr('ci_user_help'))
-    c.add_argument("--platforms", choices=['all', 'android', 'ios'], default='all', help=tr('platforms_help'))
-    c.add_argument("--xcode-version", default='26.3', help=tr('xcode_version_help'))
-    c.add_argument("--ruby-version", default='3.3', help=tr('ruby_version_help'))
+    c.add_argument("--platforms", choices=['all', 'android', 'ios'], default=None, help=tr('platforms_help'))
+    c.add_argument("--xcode-version", default=None, help=tr('xcode_version_help'))
+    c.add_argument("--ruby-version", default=None, help=tr('ruby_version_help'))
+    c.add_argument("--requirements", type=Path, help=tr("requirements_help"))
+    c.add_argument("--profile", choices=tuple(configuration.PROFILES), help=tr('profile_help'))
+    c.add_argument("--capability", choices=configuration.CAPABILITIES, action="append", default=[], help=tr('capability_help'))
+    c.add_argument("--require-tool", action="append", default=[], help=tr('required_tool_help'))
+    c.add_argument("--node-version", help=tr('node_version_help'))
+    sub.add_parser("profiles", help=tr('profiles_help'))
+    sub.add_parser("shell-env", help=tr('shell_env_help'))
     d = sub.add_parser("doctor", help=tr('doctor_help'))
     d.add_argument("--host", action="store_true", help=tr('host_help'))
     s = sub.add_parser("setup", help=tr('setup_help'))
@@ -398,9 +464,16 @@ def main(argv=None):
     sub.add_parser("start", help=tr('start_command_help'))
     args = parser.parse_args(argv)
     try:
+        if args.command == 'profiles':
+            for name, caps in configuration.PROFILES.items():
+                print(name + ": " + (", ".join(caps) or tr('base_tools_only')))
+            return 0
         if args.command == 'configure':
             return configure(args)
         cfg = config(args.config)
+        if args.command == "shell-env":
+            print(shell_environment(cfg, Path.home()), end="")
+            return 0
         if args.command == "doctor":
             return 0 if doctor(cfg, host=args.host) else 1
         if args.command == "setup":

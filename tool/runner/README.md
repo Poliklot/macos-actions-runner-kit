@@ -31,3 +31,6 @@ after all jobs finish, press Ctrl+C. The kit never dispatches a workflow itself.
 
 Only trusted private repositories; a standard account is not a VM sandbox.
 Project signing/cleanup is not installed by this kit. See [operations](OPERATIONS.md).
+
+Choose workload requirements with `--profile generic|node|backend|android|ios|mobile`.
+See [profiles](../../docs/WORKLOADS.md); existing mobile commands remain compatible.

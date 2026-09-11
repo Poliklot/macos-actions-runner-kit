@@ -213,7 +213,8 @@ class LifecycleTests(unittest.TestCase):
             self.assertFalse(kwargs["capture"])
             self.assertEqual(args[:2], ["sudo", "/bin/bash"])
             self.assertTrue(all(Path(path).is_absolute() for path in args[2:6]))
-            self.assertEqual(args[4], str((KIT / "config.example.json").resolve()))
+            self.assertEqual(kit.config(Path(args[4])), kit.configuration.normalized(self.cfg))
+            self.assertEqual(Path(args[4]).stat().st_mode & 0o777, 0o600)
             self.assertEqual(args[5], str(source_sdk.resolve()))
             # Real shell startup, no sudo/accounts/permissions changes. A stale
             # inherited PWD must not override the accessible physical directory.

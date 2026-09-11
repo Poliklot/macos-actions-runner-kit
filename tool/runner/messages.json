@@ -252,8 +252,8 @@
     "en": "Open Xcode %s and complete first launch / license acceptance."
   },
   "setup_start": {
-    "ru": "\nПодготовка %s: домашняя папка, отдельный SDK и CLI. Без admin, службы, регистрации в GitHub и запуска заданий.",
-    "en": "\nPreparing %s: home directory, separate SDK and CLI. No administrator access, service, GitHub registration or job execution."
+    "ru": "Подготавливаю %s: домашний каталог, CLI и только выбранные инструменты. Без admin-прав, службы, регистрации в GitHub и запуска заданий.",
+    "en": "Preparing %s: home directory, CLI and selected toolchains only. No administrator access, service, GitHub registration or job execution."
   },
   "download": {
     "ru": "Скачиваю официальный runner %s, %s; проверяю SHA-256…",
@@ -508,8 +508,8 @@
     "en": "The configuration file already exists or is a symlink; it was not changed. Review the existing configuration."
   },
   "configured": {
-    "ru": "Конфигурация записана в %s. Проверь параметры; из корня репозитория выполни bash tool/runner/runner setup --lang ru.",
-    "en": "Configuration written to %s. Review the settings; from the repository root run bash tool/runner/runner setup."
+    "ru": "Конфигурация записана в %s. Проверь параметры; из корня репозитория выполни bash tool/runner/runner --config %s setup --lang ru.",
+    "en": "Configuration written to %s. Review settings; from the repository root run bash tool/runner/runner --config %s setup."
   },
   "configure_help": {
     "ru": "Создать локальную конфигурацию без sudo и подключения к GitHub",
@@ -546,5 +546,109 @@
   "ios_platform_fix": {
     "ru": "В Xcode %s открой Settings → Components и установи поддержку iOS. Номера SDK недостаточно; затем повтори doctor.",
     "en": "In Xcode %s, open Settings → Components and install iOS platform support. The SDK version alone is insufficient; rerun doctor."
+  },
+  "schema_unsupported": {
+    "ru": "Поддерживается только schema_version 2.",
+    "en": "Only schema_version 2 is supported."
+  },
+  "capabilities_invalid": {
+    "ru": "Некорректный список capabilities.",
+    "en": "Invalid capabilities list."
+  },
+  "versions_invalid": {
+    "ru": "Некорректные версии или версия задана без соответствующей capability.",
+    "en": "Invalid versions or a version was set without the corresponding capability."
+  },
+  "required_tools_invalid": {
+    "ru": "required_tools: до 32 уникальных имён команд, без путей, аргументов и shell-кода.",
+    "en": "required_tools: at most 32 unique command names, without paths, arguments or shell code."
+  },
+  "profile_invalid": {
+    "ru": "Неизвестный профиль.",
+    "en": "Unknown profile."
+  },
+  "profile_platform_conflict": {
+    "ru": "Используй либо --platforms (совместимость), либо --profile/--capability/--require-tool.",
+    "en": "Use either legacy --platforms or --profile/--capability/--require-tool."
+  },
+  "profile_help": {
+    "ru": "Набор требований; без новых флагов сохраняется прежний mobile-режим",
+    "en": "Requirement preset; without new flags the legacy mobile mode is preserved"
+  },
+  "capability_help": {
+    "ru": "Добавить проверку инструментов к профилю; можно повторять",
+    "en": "Add a toolchain check to the profile; repeatable"
+  },
+  "required_tool_help": {
+    "ru": "Проверить наличие команды в CI PATH, не выполняя её; можно повторять",
+    "en": "Check a command exists in the CI PATH without executing it; repeatable"
+  },
+  "node_version_help": {
+    "ru": "Требуемый major Node.js; только вместе с node capability",
+    "en": "Required Node.js major; requires the node capability"
+  },
+  "profiles_help": {
+    "ru": "Показать профили без конфигурации и изменений компьютера",
+    "en": "List profiles without configuration or machine changes"
+  },
+  "base_tools_only": {
+    "ru": "только базовые инструменты runner",
+    "en": "runner base tools only"
+  },
+  "shell_env_help": {
+    "ru": "Вывести безопасно экранированные shell-настройки выбранного профиля",
+    "en": "Print shell-quoted environment settings for the selected profile"
+  },
+  "node_fix": {
+    "ru": "Установи нужный Node.js/npm в доступный CI PATH; версии зависимостей задаёт workflow.",
+    "en": "Install the required Node.js/npm in the CI PATH; the workflow pins dependencies."
+  },
+  "docker_daemon": {
+    "ru": "Доступен локальный Docker daemon",
+    "en": "Local Docker daemon is reachable"
+  },
+  "docker_fix": {
+    "ru": "Под CI-пользователем настрой свой локальный Docker context (unix socket) и запусти daemon. Не открывай socket личного аккаунта общими правами. SSH/TCP context не поддерживается.",
+    "en": "Configure a local Docker context (unix socket) and start its daemon under the CI account. Do not broaden access to a personal-account socket. SSH/TCP contexts are not supported."
+  },
+  "sdk_not_selected": {
+    "ru": "--source-sdk допустим только с android capability.",
+    "en": "--source-sdk requires the android capability."
+  },
+  "docker_ci_only": {
+    "ru": "Docker daemon здесь не проверялся: выполни doctor под CI-пользователем после настройки его отдельного runtime.",
+    "en": "Docker daemon was not checked here: run doctor under the CI account after configuring its independent runtime."
+  },
+  "requirements_help": {
+    "ru": "Файл требований проекта JSON; вместо profile/platforms/tool-флагов",
+    "en": "Project requirements JSON file; instead of profile/platforms/tool flags"
+  },
+  "requirements_invalid": {
+    "ru": "Неизвестные поля файла требований.",
+    "en": "Unknown requirements manifest fields."
+  },
+  "requirements_conflict": {
+    "ru": "Не смешивай --requirements с флагами требований; задай требования в одном файле.",
+    "en": "Do not mix --requirements with workload flags; define requirements in one file."
+  },
+  "paths_invalid": {
+    "ru": "path_prepend: до 16 уникальных путей внутри ${HOME}, /opt/homebrew/opt или /usr/local/opt; без shell и переходов ..",
+    "en": "path_prepend: up to 16 unique paths under ${HOME}, /opt/homebrew/opt or /usr/local/opt; no shell syntax or .."
+  },
+  "tool_versions_invalid": {
+    "ru": "tool_versions: числовые версии только для required_tools; без конфликта со встроенными проверками.",
+    "en": "tool_versions: numeric version prefixes for required_tools only; no conflicts with built-in checks."
+  },
+  "tool_path": {
+    "ru": "Путь инструментов: %s",
+    "en": "Tool path: %s"
+  },
+  "tool_path_fix": {
+    "ru": "Подготовь каталог инструментов CI: без выхода за CI/Homebrew и world-writable каталогов.",
+    "en": "Prepare the CI tool directory: no escape outside CI/Homebrew or world-writable directories."
+  },
+  "tool_version_fix": {
+    "ru": "Проверь версию в CI-аккаунте. Используется только --version, первая строка, точный числовой префикс; остальные проверки — в workflow.",
+    "en": "Check the CI-account version. Uses only --version, first line, exact numeric prefix; other checks belong in the workflow."
   }
 }

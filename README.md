@@ -15,6 +15,15 @@ No background service, personal access token manager or automatic workflow dispa
 > deferred; Intel and a full signed release are not verified for this standalone kit.
 > See [verification](docs/VERIFICATION.md) and [release readiness](docs/RELEASE-CHECKLIST.md).
 
+## Any project stack
+
+Use a **project requirements file**: arbitrary CLI tools, version constraints and CI-local
+search paths. Enable Docker/SDK integration checks independently. Presets are optional
+shortcuts, not an allowed-stack list; builds and dependency installation stay in workflows.
+[Contract, examples and migration](docs/WORKLOADS.md).
+
+The quickstart below uses the mobile shortcut; substitute your requirements file instead.
+
 ## 1. Download and open the folder
 
 On this repository's GitHub page: **Code → Download ZIP**, then extract it.
@@ -32,11 +41,17 @@ If you extracted elsewhere, use that actual folder. Stop if a command fails.
 Replace `OWNER/REPO` with the repository **whose jobs you want to run**, not this helper's public repository:
 
 ```bash
-bash runner configure --repository OWNER/REPO
+bash runner configure --repository OWNER/REPO --profile mobile
 ```
 
 This creates an ignored, non-secret `tool/runner/config.json`. Nothing contacts GitHub or requests sudo.
-Android only: add `--platforms android`; iOS only: `--platforms ios`.
+For one platform, use `--profile android` or `--profile ios`; use `--profile generic` without mobile SDKs.
+
+Alternative: use your reviewed project requirements file instead of `--profile mobile`:
+
+```bash
+bash runner configure --repository OWNER/REPO --requirements /absolute/ci-requirements.json
+```
 
 ## 3. Prepare the account
 
@@ -45,12 +60,12 @@ bash runner setup
 ```
 
 Enter your Mac password at sudo. If the `ci` account is new, choose a separate password for it.
-The installer prepares the account, its own Android SDK and the `ci-runner` command.
+The installer prepares the account and `ci-runner`; it copies an Android SDK only when selected.
 
 > [!NOTE]
-> Start with a developer Mac: Python 3.12+, Ruby 3.3, `git`, `curl`, `jq`, `gh`;
-> Xcode 26.3 for iOS; full Android SDK and JDK for Android.
-> Allow space for the SDK copy **plus 20 GiB**. The installer reports missing tools;
+> Start with a developer Mac: Python 3.12+, `git`, `curl`, `jq`, `gh`;
+> Ruby 3.3 for mobile profiles; Xcode 26.3 for iOS; full Android SDK and JDK for Android.
+> Keep **20 GiB free**, plus space for an SDK copy when Android is selected. The installer reports missing tools;
 > it does not install Xcode, accept Apple licences or make your account an administrator.
 > For iOS, also install **Platform Support** in Xcode → Settings → Components.
 > An installed Simulator or reported SDK version is not enough: `doctor` resolves a
@@ -92,3 +107,7 @@ Enter `exit` to return to your account. Registration is kept for next time.
 
 This kit prepares a runner, **not a universal signed Flutter release pipeline**.
 Project build commands, signing, credential cleanup and delivery remain the workflow owner's responsibility.
+
+For backend, select `--profile backend` and follow the [Node workflow example](examples/manual-node-ci.yml).
+Legacy mobile configs/commands remain supported. New profiles do not enable automatic PR jobs
+or install a Docker daemon. Update an installed kit only after all jobs have stopped.

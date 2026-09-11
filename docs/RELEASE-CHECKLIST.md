@@ -15,7 +15,7 @@ The maintainer approved publication and deferred the second-Mac check on 2026-09
 ## Automated evidence
 
 - [x] `bash scripts/check.sh` and static checks pass locally on Apple Silicon, including a clean source archive.
-- [x] Hosted CI passes without repository secrets or any self-hosted runner; see [evidence](VERIFICATION.md).
+- [x] Published baseline hosted CI passes without secrets or a personal runner; see [evidence](VERIFICATION.md). Release-specific hosted results are linked in each GitHub release.
 
 ## Deferred acceptance — required before broader readiness claims
 
@@ -35,3 +35,16 @@ Do not turn prior integration results into an “audited”, “production-ready
 The deferred checks do not block this explicitly early source publication. Keep the README's
 limitations visible until independently verified. Generate archives from the explicit source manifest;
 never archive a configured checkout or CI home wholesale.
+
+## 0.2.0-alpha.1 — project requirements
+
+Maintainer authorized commit, push and release on 2026-09-11. This remains an early
+source prerelease; publication does not close the runtime acceptance items below.
+
+- [ ] Fresh generic/backend setup and repeat setup on a disposable standard account.
+- [ ] Upgrade a legacy mobile installation while stopped; registration and restart are preserved.
+- [ ] CI-owned Docker runtime: real PostgreSQL tests, failure/cancellation cleanup and amd64 build.
+- [ ] Real private Node/backend Actions job with the new kit; no privileged or production access.
+- [ ] Repeat relevant acceptance on a second Mac before broad compatibility claims.
+
+Offline requirements/profile tests and owner-account read-only probes do not close these items.

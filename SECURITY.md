@@ -16,7 +16,9 @@ workflow code, including in private repositories. [Official security guidance](h
 - Verifies the initial official runner archive checksum and uses filtered extraction.
 - Refuses foreign registrations, reserved usernames, unsafe settings and known symlink/ownership conflicts.
 - Keeps registration tokens out of command arguments and kit files; no echoed-input fallback.
-- Installs root-owned wrapper code and uses a separate SDK/account.
+- Installs root-owned wrapper code and uses a separate account; copies an SDK only when selected.
+- Validates declarative capabilities/version constraints; config cannot run install hooks or shell probes.
+- Bounds command probes and refuses remote Docker contexts before contacting a daemon.
 - Offers offline regression tests; privileged setup is not exercised by ordinary tests.
 
 ## What it does not do
@@ -33,6 +35,24 @@ workflow code, including in private repositories. [Official security guidance](h
 
 Never attach personal SSH keys, a personal Apple ID, broad cloud credentials or company-wide PATs
 to the CI account. Use separate accounts per repository and minimum-scoped, revocable workload secrets.
+
+## Project manifests
+
+Manifests are trusted configuration, not sandboxed plugins. Presence-only tools are never
+executed by custom probes; opting into `tool_versions` runs the named installed executable
+with fixed `--version` arguments as CI, never as root or the owner's host preflight.
+No arbitrary arguments, regexes, environment exports or privileged install hooks are accepted.
+The manifest is copied at configure time; later edits to the source file cannot hot-reconfigure
+an installed runner. Project paths are CI/Homebrew-scoped and checked before doctor probes.
+A local tool may still be malicious; PATH validation is not a dependency trust guarantee.
+
+## Docker workloads
+
+Docker is not installed or shared by this kit. A daemon may expose its containers, volumes
+and host mounts to anyone with socket access. Do not grant the CI account access to the
+owner's personal daemon, make sockets world-writable, or treat a local Unix endpoint as
+proof of isolation. Provision and validate an independent runtime explicitly. `doctor` only
+performs read-only context/server checks; cleanup and architecture belong to the workflow.
 
 ## Reporting
 

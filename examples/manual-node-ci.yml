@@ -1,0 +1,65 @@
+# Copy into a TRUSTED PRIVATE Node repository. Requires package-lock.json and
+# test/build scripts at its root; adapt these commands and the account/label first.
+name: Manual Node CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Execution machine (no automatic fallback)
+        required: true
+        default: github-hosted
+        type: choice
+        options: [github-hosted, self-hosted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-node-ci-${{ inputs.runner }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Branch names alone are not authorization: review repository/workflow access.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.repository.private == true &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ${{ fromJSON(inputs.runner == 'self-hosted' && '["self-hosted","macOS","local-backend"]' || '["ubuntu-24.04"]') }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check the local account and workload before checkout
+        if: inputs.runner == 'self-hosted'
+        run: |
+          test "$(uname -s)" = Darwin
+          test "$(id -un)" = ci_backend
+          test "$(id -u)" -ne 0
+          if id -Gn | tr ' ' '\n' | grep -qx admin; then
+            echo 'Use the dedicated standard account.' >&2
+            exit 1
+          fi
+          "$HOME/bin/ci-runner" doctor
+
+      - name: Check out the reviewed revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select the project Node version
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: Install locked dependencies, test and build
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      # Project-specific PostgreSQL/Docker tests must create disposable resources
+      # and clean up their own resources on failure/cancellation. No global prune.
+      # No deployment, registry login or production credentials in this example.

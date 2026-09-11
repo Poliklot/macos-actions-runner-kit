@@ -1,3 +1,23 @@
+# Project requirements — 0.2.0-alpha.1 verification, 2026-09-11
+
+Early source release; the installed runner was not updated or re-registered.
+
+- 124 offline tests passed on macOS / Apple Silicon / Python 3.14, including legacy
+  mobile compatibility, v2 config, profile composition, environment quoting, setup snapshot
+  cleanup, bounded probes and rejection of remote Docker contexts before daemon access.
+- Portable manifests, arbitrary tools/version prefixes, CI-local paths, symlink escapes,
+  conflicting flags and CI-only custom probe execution have offline regressions.
+- Shell/Python syntax, ShellCheck and actionlint passed; source scan found no secrets.
+- The allowlisted archive was extracted without Git metadata and passed the same suite.
+- Read-only owner-account `doctor --host` passed for generic, Node and backend. The backend
+  host check covers Docker CLI only; this is not CI-account or PostgreSQL acceptance.
+
+Not executed: privileged setup/profile migration on a disposable CI account, new runner
+registration, a real backend Actions job, container builds, signing/delivery or a second Mac.
+The [acceptance checklist](RELEASE-CHECKLIST.md) retains those acceptance items.
+
+---
+
 # Verification — 2026-09-04
 
 Local environment: macOS / Apple Silicon, Python 3.14.0. This document records tests,
