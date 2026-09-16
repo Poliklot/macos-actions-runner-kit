@@ -32,6 +32,9 @@ from ios_platform_probe import available as ios_platform_available
 import i18n
 import configuration
 import workloads
+import repair
+import ui
+from diagnostics import CheckResult, RemediationPlan, Report
 from i18n import tr
 
 ROOT = Path(__file__).resolve().parent
@@ -51,13 +54,42 @@ def configure(args):
     """Create non-secret local settings without root, network or overwriting files."""
     if os.getuid() == 0:
         raise ValueError(tr('setup_no_root'))
+    if args.repository is None:
+        if not ui.interactive():
+            raise ValueError(tr("configure_interactive_required"))
+        ui.title(tr("configure_wizard_title"))
+        args.repository = ui.input_text(tr("configure_repository_question"), default="OWNER/REPO")
+        if args.repository is None:
+            raise KeyboardInterrupt
+        if (args.profile is None and not args.capability and not args.require_tool
+                and args.requirements is None and args.platforms is None):
+            profile_choices = [
+                (tr("configure_profile_generic"), "generic"),
+                (tr("configure_profile_backend"), "backend"),
+                (tr("configure_profile_android"), "android"),
+                (tr("configure_profile_ios"), "ios"),
+                (tr("configure_profile_mobile"), "mobile"),
+                (tr("configure_profile_node"), "node"),
+            ]
+            args.profile = ui.select(tr("configure_profile_question"), profile_choices,
+                                     default="mobile")
+            if args.profile is None:
+                raise KeyboardInterrupt
+        args.label = ui.input_text(tr("configure_label_question"),
+                                   default=args.label or "local-macos")
+        args.ci_user = ui.input_text(tr("configure_user_question"), default=args.ci_user or "ci")
+        if args.label is None or args.ci_user is None:
+            raise KeyboardInterrupt
+    args.label = args.label or "local-macos"
+    args.ci_user = args.ci_user or "ci"
     if args.config.exists() or args.config.is_symlink():
         raise ValueError(tr('config_exists'))
     if args.repository.lower() in ('owner/repo', 'your-org/your-repo', 'example/mobile-app'):
         raise ValueError(tr('config_placeholder'))
     value = config(ROOT / 'config.example.json')
     value.update(repository=args.repository, label=args.label, ci_user=args.ci_user)
-    custom = args.profile is not None or args.capability or args.require_tool or args.node_version is not None
+    custom = (args.profile is not None or args.capability or args.require_tool
+              or args.java_version is not None or args.node_version is not None)
     if args.requirements is not None:
         if custom or args.platforms is not None or args.ruby_version is not None or args.xcode_version is not None:
             raise ValueError(tr('requirements_conflict'))
@@ -66,9 +98,11 @@ def configure(args):
         if args.platforms is not None:
             raise ValueError(tr('profile_platform_conflict'))
         value = configuration.for_profile(value, args.profile or 'generic', extra=args.capability,
-                                          tools=args.require_tool, node=args.node_version,
+                                          tools=args.require_tool, java=args.java_version or "21",
+                                          node=args.node_version,
                                           ruby=args.ruby_version or "3.3", xcode=args.xcode_version or "26.3")
-        if ((args.ruby_version is not None and "ruby" not in value["capabilities"])
+        if ((args.java_version is not None and "java" not in value["capabilities"])
+                or (args.ruby_version is not None and "ruby" not in value["capabilities"])
                 or (args.xcode_version is not None and "ios" not in value["capabilities"])):
             raise ValueError(tr("versions_invalid"))
     else:
@@ -84,7 +118,7 @@ def configure(args):
         raise ValueError(tr('config_exists')) from None
     with os.fdopen(fd, 'w', encoding='utf-8') as output_file:
         output_file.write(json.dumps(value, indent=2) + '\n')
-    print(tr('configured', args.config, shlex.quote(str(args.config.resolve()))))
+    ui.success(tr('configured', args.config, shlex.quote(str(args.config.resolve()))))
     return 0
 
 
@@ -101,12 +135,24 @@ def output(args, env=None):
         return False, ""
 
 
+def output_all(args, env=None):
+    """Bounded probe for tools such as Java that report versions on stderr."""
+    try:
+        result = run(args, env=env, timeout=15)
+        text = "\n".join(value.strip() for value in (result.stdout or "", result.stderr or "")
+                         if value and value.strip())
+        return result.returncode == 0, text
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+
+
 # Only these fixed variables may be exported by shell-env. Never print inherited secrets.
-MANAGED_VARS = ("PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT", "DEVELOPER_DIR", "DOCKER_CONFIG")
+MANAGED_VARS = ("PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME", "DEVELOPER_DIR", "DOCKER_CONFIG")
 DOCKER_OVERRIDES = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH")
 
 
-def environment(cfg: dict, home: Path, sdk: Path | None = None) -> dict:
+def environment(cfg: dict, home: Path, sdk: Path | None = None, *,
+                applications: Path = Path("/Applications")) -> dict:
     cfg = configuration.normalized(cfg)
     caps, versions = cfg["capabilities"], cfg["versions"]
     env = {key: value for key, value in os.environ.items()
@@ -124,18 +170,63 @@ def environment(cfg: dict, home: Path, sdk: Path | None = None) -> dict:
         version = versions["node"]
         search.extend([Path(f"/opt/homebrew/opt/node@{version}/bin"),
                        Path(f"/usr/local/opt/node@{version}/bin")])
+    if "java" in caps:
+        version = versions["java"]
+        search.extend([Path(f"/opt/homebrew/opt/openjdk@{version}/bin"),
+                       Path(f"/usr/local/opt/openjdk@{version}/bin")])
     search.extend([Path("/opt/homebrew/bin"), Path("/opt/homebrew/sbin")])
     if "android" in caps:
         sdk = sdk or home / "Library/Android/sdk"
         env.update(ANDROID_HOME=str(sdk), ANDROID_SDK_ROOT=str(sdk))
         search.extend([sdk / "platform-tools", sdk / "emulator", sdk / "cmdline-tools/latest/bin"])
     env["PATH"] = ":".join(map(str, search)) + ":/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    if "java" in caps:
+        java = shutil.which("java", path=env["PATH"])
+        if java:
+            resolved = Path(java).resolve()
+            candidate = resolved.parent.parent
+            if resolved.parent.name == "bin" and (candidate / "release").is_file():
+                env["JAVA_HOME"] = str(candidate)
     if "ios" in caps:
-        xcode = Path(f'/Applications/Xcode_{versions["xcode"]}.app/Contents/Developer')
-        env["DEVELOPER_DIR"] = str(xcode if xcode.is_dir() else Path("/Applications/Xcode.app/Contents/Developer"))
+        selection = workloads.xcode_selection(versions["xcode"], applications=applications)
+        env["DEVELOPER_DIR"] = str(selection.developer_dir)
     if "docker" in caps:
         env["DOCKER_CONFIG"] = str(home / ".docker")
     return env
+
+
+def environment_report(cfg: dict, home: Path, sdk: Path | None = None, *,
+                       applications: Path = Path("/Applications")) -> dict:
+    """Describe only values owned by the wrapper; inherited variables stay private."""
+    normalized = configuration.normalized(cfg)
+    env = environment(normalized, home, sdk, applications=applications)
+    sources = {
+        "PATH": tr("env_source_path"),
+        "ANDROID_HOME": tr("env_source_android"),
+        "ANDROID_SDK_ROOT": tr("env_source_android"),
+        "JAVA_HOME": tr("env_source_java"),
+        "DEVELOPER_DIR": tr("env_source_xcode"),
+        "DOCKER_CONFIG": tr("env_source_docker"),
+    }
+    variables = []
+    for name in MANAGED_VARS:
+        item = {"name": name, "status": "set" if name in env else "unset",
+                "source": sources[name]}
+        if name in env:
+            item["value"] = env[name]
+        variables.append(item)
+    return {"schema": 1, "scope": "managed-runner-environment", "variables": variables}
+
+
+def render_environment_report(cfg: dict, home: Path, *, json_output=False) -> str:
+    report = environment_report(cfg, home)
+    if json_output:
+        return json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    lines = [tr("env_title")]
+    for item in report["variables"]:
+        value = item.get("value", tr("env_unset"))
+        lines.extend((f"{item['name']}={value}", f"  {tr('env_source')}: {item['source']}"))
+    return "\n".join(lines) + "\n"
 
 
 def shell_environment(cfg: dict, home: Path) -> str:
@@ -159,7 +250,43 @@ def require_ci(cfg: dict):
         raise ValueError(tr('ci_login', cfg["ci_user"], cfg["ci_user"]))
 
 
-def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
+def docker_guidance(probe: workloads.DockerProbe) -> tuple[str, str]:
+    """Return a localized cause and the safest relevant next action."""
+    causes = {
+        "ready": tr("docker_status_ready"),
+        "cli-missing": tr("docker_status_cli_missing"),
+        "context-missing": tr("docker_status_context_missing"),
+        "context-invalid": tr("docker_status_context_invalid"),
+        "remote-context": tr("docker_status_remote_context"),
+        "endpoint-unsafe": tr("docker_status_endpoint_unsafe"),
+        "foreign-user-socket": tr("docker_status_foreign_user_socket"),
+        "socket-missing": tr("docker_status_socket_missing"),
+        "endpoint-not-socket": tr("docker_status_endpoint_not_socket"),
+        "socket-permission": tr("docker_status_socket_permission"),
+        "daemon-unreachable": tr("docker_status_daemon_unreachable"),
+    }
+    cause = causes[probe.status]
+    if "colima" in probe.providers:
+        fix = tr("docker_fix_colima")
+    elif probe.status == "cli-missing":
+        fix = tr("docker_fix_cli")
+    else:
+        fix = tr("docker_fix_provider")
+    if probe.status in ("remote-context", "foreign-user-socket", "endpoint-unsafe"):
+        fix = tr("docker_fix_isolation") + " " + fix
+    return cause, fix
+
+
+def tool_install_guidance(tool: str) -> str:
+    known = {
+        "actionlint": tr("tool_install_actionlint"),
+        "gpg": tr("tool_install_gpg"),
+        "shellcheck": tr("tool_install_shellcheck"),
+    }
+    return known.get(tool, tr("tools_install"))
+
+
+def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
     cfg = configuration.normalized(cfg)
     caps, versions = cfg["capabilities"], cfg["versions"]
     home = Path.home()
@@ -170,95 +297,230 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
     for path in cfg.get("path_prepend", []):
         if not workloads.path_ready(Path(path.replace("${HOME}", str(home), 1)), home):
             raise ValueError(tr('tool_path_fix'))
-    rows = []
+    rows: list[CheckResult] = []
 
-    def check(ok, title, fix):
-        rows.append((bool(ok), title, fix))
+    def check(check_id, ok, title, fix, *, detected=None, cause=None, verify=None,
+              actor=None, docs=None, automation=None):
+        rows.append(CheckResult(check_id, bool(ok), title, fix, detected, cause,
+                                verify, actor, docs, automation))
 
-    check(platform.system() == "Darwin", "macOS", tr('mac_required'))
-    check(platform.machine() in ("arm64", "x86_64"), tr('architecture'), tr('architecture_required'))
+    system = platform.system()
+    machine = platform.machine()
+    check("host.macos", system == "Darwin", "macOS", tr('mac_required'),
+          detected=system, actor=tr("actor_admin"), verify="uname -s")
+    check("host.architecture", machine in ("arm64", "x86_64"), tr('architecture'),
+          tr('architecture_required'), detected=machine, actor=tr("actor_admin"),
+          verify="uname -m")
     free = shutil.disk_usage(home).free / 1024**3
-    check(free >= cfg["minimum_free_gib"], tr('free_space', f"{free:.1f}"), tr('free_space_fix', cfg["minimum_free_gib"]))
+    check("host.free-space", free >= cfg["minimum_free_gib"],
+          tr('free_space', f"{free:.1f}"), tr('free_space_fix', cfg["minimum_free_gib"]),
+          detected=f"{free:.1f} GiB; minimum {cfg['minimum_free_gib']} GiB",
+          actor=tr("actor_admin"), verify="df -h $HOME")
     if not host:
-        check(current_ci(cfg), tr('ci_user', cfg["ci_user"]),
-              tr('ci_user_fix', cfg["ci_user"]))
+        ci_ok = current_ci(cfg)
+        check("account.ci-user", ci_ok, tr('ci_user', cfg["ci_user"]),
+              tr('ci_user_fix', cfg["ci_user"]), detected=pwd.getpwuid(os.getuid()).pw_name,
+              actor=tr("actor_admin"), verify=f"sudo -iu {cfg['ci_user']} && ci-runner doctor")
     for tool in dict.fromkeys(["python3", "git", "curl", "jq", "gh",
                                *(cfg["required_tools"] if not host else [])]):
-        check(shutil.which(tool, path=env["PATH"]), tr('command', tool),
-              tr('tools_install'))
+        location = shutil.which(tool, path=env["PATH"])
+        check(f"tool.{tool}", location, tr('command', tool), tool_install_guidance(tool),
+              detected=location or tr("missing"), actor=tr("actor_admin"),
+              verify=f"command -v {tool}")
     if not host:
         for tool, version in cfg.get("tool_versions", {}).items():
             # Never execute manifest-selected tools under the owner's account or root.
-            check(current_ci(cfg) and workloads.tool_ready(output, env, tool, version),
-                  tool + " " + version, tr('tool_version_fix'))
+            ok = current_ci(cfg) and workloads.tool_ready(output, env, tool, version)
+            check(f"tool-version.{tool}", ok, tool + " " + version,
+                  tr('tool_version_fix'), detected=f"required prefix {version}",
+                  actor=tr("actor_ci"), verify=f"{tool} --version")
     if "ruby" in caps:
         ok, version = output(["ruby", "-e", "print RUBY_VERSION"], env)
-        check(ok and version.startswith(versions["ruby"] + "."), f"Ruby: {version or tr('missing')}",
-              tr('ruby_fix', versions["ruby"]))
+        check("runtime.ruby", ok and version.startswith(versions["ruby"] + "."),
+              f"Ruby: {version or tr('missing')}", tr('ruby_fix', versions["ruby"]),
+              detected=version or tr("missing"), actor=tr("actor_admin"),
+              verify='ruby -e \'print RUBY_VERSION\'')
     if "node" in caps:
-        check(workloads.node_ready(output, env, versions.get("node")),
-              "Node.js" + (" " + versions["node"] if "node" in versions else ""), tr('node_fix'))
-        check(output(["npm", "--version"], env)[0], "npm", tr('node_fix'))
+        node_ok = workloads.node_ready(output, env, versions.get("node"))
+        check("runtime.node", node_ok,
+              "Node.js" + (" " + versions["node"] if "node" in versions else ""),
+              tr('node_fix'), detected=versions.get("node", tr("version_any")),
+              actor=tr("actor_admin"), verify="node --version")
+        npm_ok, npm_version = output(["npm", "--version"], env)
+        check("runtime.npm", npm_ok, "npm", tr('node_fix'),
+              detected=npm_version or tr("missing"), actor=tr("actor_admin"),
+              verify="npm --version")
+    if "java" in caps:
+        java_home = env.get("JAVA_HOME")
+        java_bin = Path(java_home) / "bin/java" if java_home else None
+        java_ok, java_text = output_all([str(java_bin), "-version"], env) if java_bin else (False, "")
+        detected_major = workloads.java_version(java_text)
+        required_major = versions["java"]
+        ready = bool(java_ok and detected_major == required_major)
+        check("runtime.java", ready, f"Java {required_major}",
+              tr("java_fix", required_major, required_major),
+              detected=(f"JAVA_HOME={java_home}; {java_text.splitlines()[0]}" if java_home and java_text
+                        else tr("java_home_missing")),
+              cause=None if ready else tr("java_cause", required_major),
+              actor=tr("actor_admin"),
+              verify='echo "$JAVA_HOME" && "$JAVA_HOME/bin/java" -version')
     if "docker" in caps:
         if host:
             # Setup must not depend on (or contact) the owner's personal daemon.
-            check(shutil.which("docker", path=env["PATH"]), "Docker CLI", tr('docker_fix'))
+            docker_cli = shutil.which("docker", path=env["PATH"])
+            check("docker.cli", docker_cli, "Docker CLI", tr('docker_fix_cli'),
+                  detected=docker_cli or tr("missing"), actor=tr("actor_admin"),
+                  verify="command -v docker")
         else:
-            check(workloads.docker_ready(output, env), tr('docker_daemon'), tr('docker_fix'))
+            docker = workloads.docker_probe(output, env, home=home)
+            cause, fix = docker_guidance(docker)
+            check("docker.daemon", docker.ready, tr('docker_daemon'), fix,
+                  detected=docker.detected(), cause=None if docker.ready else cause,
+                  actor=tr("actor_ci"),
+                  verify="docker context show && docker info --format '{{.ServerVersion}}'",
+                  docs="https://github.com/Poliklot/macos-actions-runner-kit/blob/main/docs/WORKLOADS.md#docker-and-acceptance-boundaries",
+                  automation=("docker.colima" if not docker.ready and "colima" in docker.providers
+                              and docker.status not in ("cli-missing", "endpoint-unsafe") else None))
     if "ios" in caps:
+        selection = workloads.xcode_selection(versions["xcode"])
+        selection_causes = {
+            "ready": tr("xcode_selection_ready"),
+            "missing": tr("xcode_selection_missing"),
+            "ambiguous": tr("xcode_selection_ambiguous"),
+        }
+        check("xcode.selection", selection.ready, tr("xcode_selection_title"),
+              tr("xcode_selection_fix", versions["xcode"]), detected=selection.detected(),
+              cause=None if selection.ready else selection_causes[selection.status],
+              actor=tr("actor_admin"), verify="ci-runner doctor --explain xcode.selection")
         ok, version = output(["xcodebuild", "-version"], env)
-        check(ok and version.splitlines()[0:1] == [f'Xcode {versions["xcode"]}'],
+        check("xcode.version", ok and version.splitlines()[0:1] == [f'Xcode {versions["xcode"]}'],
               f'Xcode {versions["xcode"]}',
-              f'https://developer.apple.com/download/all/?q=Xcode%20{versions["xcode"]}')
+              f'https://developer.apple.com/download/all/?q=Xcode%20{versions["xcode"]}',
+              detected=f"{env['DEVELOPER_DIR']}: {version or tr('missing')}",
+              actor=tr("actor_admin"), verify="xcodebuild -version")
         ok, _ = output(["xcodebuild", "-checkFirstLaunchStatus"], env)
         sdk_ok, sdk_version = output(["xcrun", "--sdk", "iphoneos", "--show-sdk-version"], env)
-        check(ok and sdk_ok, tr('ios_sdk', sdk_version or tr('not_ready')),
-              tr('xcode_fix', versions["xcode"]))
+        check("xcode.first-launch", ok and sdk_ok,
+              tr('ios_sdk', sdk_version or tr('not_ready')),
+              tr('xcode_fix', versions["xcode"]), detected=sdk_version or tr("not_ready"),
+              actor=tr("actor_admin"), verify="xcodebuild -checkFirstLaunchStatus")
         # SDK metadata can exist without installed/enabled platform support.
-        check(ok and sdk_ok and ios_platform_available(env), tr('ios_build_destination'),
-              tr('ios_platform_fix', versions["xcode"]))
+        destination_ok = ok and sdk_ok and ios_platform_available(env)
+        check("xcode.ios-platform", destination_ok, tr('ios_build_destination'),
+              tr('ios_platform_fix', versions["xcode"]), detected=env["DEVELOPER_DIR"],
+              actor=tr("actor_admin"), verify="ci-runner doctor --explain xcode.ios-platform")
         if not host and current_ci(cfg):
             try:
                 paths = default_keychain()
                 ok, _ = output(["security", "list-keychains", "-d", "user"], env)
                 ok = ok and (not paths or Path(paths[0]).is_file())
                 detail = tr('keychain_present') if paths else tr('keychain_absent')
-                check(ok, tr("keychain_state", detail), tr('keychain_error'))
+                check("keychain.api", ok, tr("keychain_state", detail), tr('keychain_error'),
+                      detected=detail, actor=tr("actor_ci"),
+                      verify="security list-keychains -d user")
             except OSError as error:
-                check(False, "Keychain API", str(error))
+                check("keychain.api", False, "Keychain API", str(error), cause=str(error),
+                      actor=tr("actor_ci"), verify="security list-keychains -d user")
     if "android" in caps:
         sdk_path = Path(env["ANDROID_HOME"])
         required = ["platform-tools/adb", "emulator/emulator", "cmdline-tools/latest/bin/sdkmanager",
                     "cmdline-tools/latest/bin/avdmanager"]
         sdk_ok = all((sdk_path / p).is_file() and os.access(sdk_path / p, os.X_OK)
                      for p in required) and (sdk_path / "build-tools").is_dir()
-        check(sdk_ok, f"Android SDK: {sdk_path}",
-              tr('sdk_required'))
-        check(not (sdk_path / ".local-ci-sdk-copy-in-progress").exists(), tr('sdk_copied'),
-              tr('sdk_interrupted'))
+        check("android.sdk", sdk_ok, f"Android SDK: {sdk_path}", tr('sdk_required'),
+              detected=str(sdk_path), actor=tr("actor_admin"),
+              verify=f"test -x {shlex.quote(str(sdk_path / 'platform-tools/adb'))}")
+        copy_ok = not (sdk_path / ".local-ci-sdk-copy-in-progress").exists()
+        check("android.sdk-copy", copy_ok, tr('sdk_copied'), tr('sdk_interrupted'),
+              detected=str(sdk_path), actor=tr("actor_admin"), verify="ci-runner doctor")
         if sdk_ok and not host:
-            check(sdk_path.resolve().is_relative_to(home.resolve()) and sdk_path.stat().st_uid == os.getuid(),
-                  tr('sdk_owner'), tr('setup_repeat'))
+            owned = sdk_path.resolve().is_relative_to(home.resolve()) and sdk_path.stat().st_uid == os.getuid()
+            check("android.sdk-owner", owned, tr('sdk_owner'), tr('setup_repeat'),
+                  detected=str(sdk_path), actor=tr("actor_admin"), verify="ls -ld \"$ANDROID_HOME\"")
             ok, _ = output([str(sdk_path / "cmdline-tools/latest/bin/sdkmanager"), "--version"], env)
-            check(ok, "SDK Manager / Java", tr('jdk_required'))
+            check("android.sdkmanager-java", ok, "SDK Manager / Java", tr('jdk_required'),
+                  actor=tr("actor_admin"), verify="sdkmanager --version")
             ok, _ = output([str(sdk_path / "emulator/emulator"), "-accel-check"], env)
-            check(ok, tr('emulator_acceleration'), tr('emulator_fix'))
+            check("android.emulator-acceleration", ok, tr('emulator_acceleration'), tr('emulator_fix'),
+                  actor=tr("actor_admin"), verify="emulator -accel-check")
     if not host and ("android" in caps or "ios" in caps):
         # Detect recovery journals left by this repository's existing signing helper.
         journals = list((home / "Library/Caches").glob("*-signing-state"))
-        check(not journals, tr('signing_clean'),
-              tr('signing_recover'))
+        check("signing.recovery", not journals, tr('signing_clean'), tr('signing_recover'),
+              detected=", ".join(map(str, journals)) or tr("none"), actor=tr("actor_ci"),
+              verify="find \"$HOME/Library/Caches\" -name '*-signing-state' -maxdepth 1")
+    return Report(rows, host=host)
+
+
+def doctor(cfg: dict, *, host=False, sdk=None, print_report=True, verbose=False,
+           json_output=False, explain=None) -> bool:
+    report = doctor_report(cfg, host=host, sdk=sdk)
     if print_report:
-        for ok, title, fix in rows:
-            status = "OK" if ok else tr("needs_attention")
-            print(f"{status}  {title}")
-            if not ok:
-                print(f"       {fix}")
-        if host and "docker" in caps:
-            print(tr('docker_ci_only'))
-        print("\n" + (tr('doctor_ok')
-                        if all(r[0] for r in rows) else tr('doctor_failed')))
-    return all(row[0] for row in rows)
+        if json_output:
+            print(report.json_text(), end="")
+        else:
+            ui.show_report(report, verbose=verbose, explain=explain,
+                           docker_host_note=host and "docker" in configuration.normalized(cfg)["capabilities"])
+    return report.ready
+
+
+def plan(cfg: dict, *, host=False, json_output=False) -> bool:
+    """Print an ordered read-only remediation plan without changing the machine."""
+    result = RemediationPlan(doctor_report(cfg, host=host))
+    if json_output:
+        print(result.json_text(), end="")
+    else:
+        ui.show_plan(result)
+    return result.ready
+
+
+def interactive_readiness(cfg: dict, *, repair_mode="ask") -> bool | None:
+    """Check, optionally repair safe CI-owned state, and return None on user cancellation."""
+    report = doctor_report(cfg)
+    ui.show_readiness_summary(report)
+    if report.ready:
+        return True
+    if repair_mode == "never" or (repair_mode == "ask" and not ui.interactive()):
+        ui.show_plan(RemediationPlan(report))
+        return False
+
+    attempted: set[str] = set()
+    while not report.ready:
+        actions = [action for action in repair.available(report) if action.action_id not in attempted]
+        if repair_mode == "auto":
+            choice = "automatic" if actions else "instructions"
+        else:
+            choices = []
+            if actions:
+                choices.append((tr("repair_choice_automatic", len(actions)), "automatic"))
+            choices.extend(((tr("repair_choice_instructions"), "instructions"),
+                            (tr("repair_choice_retry"), "retry"),
+                            (tr("repair_choice_cancel"), "cancel")))
+            choice = ui.select(tr("repair_question"), choices,
+                               default="automatic" if actions else "instructions")
+        if choice is None or choice == "cancel":
+            ui.warning(tr("repair_cancelled"))
+            return None
+        if choice == "instructions":
+            ui.show_plan(RemediationPlan(report))
+            return False
+        if choice == "retry":
+            report = doctor_report(cfg)
+            ui.show_readiness_summary(report)
+            continue
+        ui.title(tr("repair_title"))
+        env = environment(cfg, Path.home())
+        for action in actions:
+            attempted.add(action.action_id)
+            ui.info(action.title)
+            ok, message = repair.apply(action, env=env, run=run)
+            (ui.success if ok else ui.error)(message)
+        report = doctor_report(cfg)
+        ui.show_readiness_summary(report)
+        if repair_mode == "auto" and not report.ready:
+            ui.show_plan(RemediationPlan(report))
+            return False
+    return True
 
 
 def setup(cfg, config_path, source_sdk):
@@ -276,7 +538,7 @@ def setup(cfg, config_path, source_sdk):
            if "android" in cfg["capabilities"] else Path("/"))
     if not doctor(cfg, host=True, sdk=sdk):
         return 1
-    print(tr('setup_start', cfg["ci_user"]), flush=True)
+    ui.title(tr('setup_start', cfg["ci_user"]))
     # Freeze validated settings for this setup; never rewrite the legacy source.
     # sudo runs outside the administrator's private checkout. Only known source
     # files are installed; configuration contains no executable hooks.
@@ -307,7 +569,7 @@ def download_runner(cfg, target, arch):
         temporary = Path(temporary)
         archive = temporary / "runner.tar.gz"
         digest = hashlib.sha256()
-        print(tr('download', version, arch), flush=True)
+        ui.title(tr('download', version, arch))
         with urllib.request.urlopen(url, timeout=120) as source, archive.open("wb") as destination:
             while chunk := source.read(1024**2):
                 digest.update(chunk)
@@ -344,12 +606,17 @@ def read_registration_token():
     # Fail closed instead of getpass's fallback to an echoed stdin read.
     if not sys.stdin.isatty():
         raise ValueError(tr("token_terminal"))
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", getpass.GetPassWarning)
-        try:
-            token = getpass.getpass(tr("token_prompt"))
-        except (getpass.GetPassWarning, EOFError):
-            raise ValueError(tr("token_terminal")) from None
+    if ui.interactive():
+        token = ui.password(tr("token_prompt"))
+        if token is None:
+            raise ValueError(tr("token_terminal"))
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", getpass.GetPassWarning)
+            try:
+                token = getpass.getpass(tr("token_prompt"))
+            except (getpass.GetPassWarning, EOFError):
+                raise ValueError(tr("token_terminal")) from None
     # Reject pasted commands, braces, spaces, control characters and PATs.
     # Do not assume a fixed token length or prefix that GitHub may change.
     if (not re.fullmatch(r"[A-Za-z0-9_-]{16,256}", token)
@@ -364,15 +631,15 @@ def register(cfg):
         return 1
     target = runner_directory(Path.home())
     if registration_matches(target, cfg):
-        print(tr('already_registered'))
+        ui.success(tr('already_registered'))
         return 0
     if not target.exists():
         download_runner(cfg, target, "arm64" if platform.machine() == "arm64" else "x64")
     elif not (target / ".kit-download.json").is_file():
         raise ValueError(tr('unknown_install'))
-    print(tr('registration_url', cfg["repository"]))
-    print(tr("token_help"), flush=True)
-    print(tr("registration_defaults", cfg["label"]), flush=True)
+    ui.title(tr('registration_url', cfg["repository"]))
+    ui.info(tr("token_help"))
+    ui.info(tr("registration_defaults", cfg["label"]))
     token = read_registration_token()
     host_name = re.sub(r"[^a-zA-Z0-9_-]", "-", socket.gethostname().split(".")[0])[:24]
     # Teammates can have identical default Mac hostnames; never replace theirs.
@@ -381,7 +648,7 @@ def register(cfg):
     # Official supported input, consumed and masked by Runner.Listener.
     # The token never appears in argv, shell history, config.json or our logs.
     env["ACTIONS_RUNNER_INPUT_TOKEN"] = token
-    print(tr("registering"), flush=True)
+    ui.title(tr("registering"))
     try:
         result = run(["/bin/bash", "./config.sh", "--unattended", "--url", f'https://github.com/{cfg["repository"]}',
                       "--name", name, "--labels", cfg["label"], "--work", "_work"],
@@ -394,20 +661,27 @@ def register(cfg):
     if result.returncode == 0 and not registration_matches(target, cfg):
         raise ValueError(tr('registration_missing'))
     if result.returncode == 0:
-        print(tr('registration_ok'))
+        ui.success(tr('registration_ok'))
     else:
-        print(tr("registration_failed"), file=sys.stderr)
+        ui.error(tr("registration_failed"), file=sys.stderr)
         if re.search(r"\b(401|403|404)\b", diagnostic):
-            print(tr("registration_auth_hint"), file=sys.stderr)
-        print(tr("original_output"), file=sys.stderr)
-        print(diagnostic, file=sys.stderr)
+            ui.warning(tr("registration_auth_hint"), file=sys.stderr)
+        ui.info(tr("original_output"), file=sys.stderr)
+        ui.text(diagnostic, file=sys.stderr)
     return result.returncode
 
 
-def start(cfg):
+def start(cfg, *, repair_mode="ask"):
     require_ci(cfg)
-    if not doctor(cfg):
-        return 1
+    if repair_mode == "never" or (repair_mode == "ask" and not ui.interactive()):
+        if not doctor(cfg):
+            return 1
+    else:
+        readiness = interactive_readiness(cfg, repair_mode=repair_mode)
+        if readiness is None:
+            return 130
+        if not readiness:
+            return 1
     target = runner_directory(Path.home())
     if not registration_matches(target, cfg):
         raise ValueError(tr('register_first'))
@@ -419,8 +693,8 @@ def start(cfg):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError(tr('session_running')) from None
-        print(tr('start_help'), flush=True)
-        print(tr("original_output"), flush=True)
+        ui.title(tr('start_help'))
+        ui.info(tr("original_output"))
         # Same foreground process group: terminal Ctrl+C reaches the official
         # runner. Parent ignores KeyboardInterrupt until that runner exits.
         child = subprocess.Popen(["/usr/bin/caffeinate", "-i", "/bin/bash", "./run.sh"],
@@ -429,23 +703,23 @@ def start(cfg):
             try:
                 return child.wait()
             except KeyboardInterrupt:
-                print(tr('stopping'), flush=True)
+                ui.warning(tr('stopping'))
 
 
 def main(argv=None):
     try:
         argv = i18n.select(list(sys.argv[1:] if argv is None else argv))
     except (ValueError, OSError) as error:
-        print(tr("error", error), file=sys.stderr)
+        ui.error(tr("error", error), file=sys.stderr)
         return 2
     parser = i18n.Parser(prog="ci-runner", description=tr('description'))
     parser.add_argument("--lang", metavar="ru|en", help=tr("language_help"))
     parser.add_argument("--config", type=Path, default=ROOT / "config.json", help=tr("config_help"))
     sub = parser.add_subparsers(dest="command", required=True)
     c = sub.add_parser("configure", help=tr('configure_help'))
-    c.add_argument("--repository", required=True, help=tr('repository_help'))
-    c.add_argument("--label", default="local-macos", help=tr('label_help'))
-    c.add_argument("--ci-user", default="ci", help=tr('ci_user_help'))
+    c.add_argument("--repository", help=tr('repository_help'))
+    c.add_argument("--label", default=None, help=tr('label_help'))
+    c.add_argument("--ci-user", default=None, help=tr('ci_user_help'))
     c.add_argument("--platforms", choices=['all', 'android', 'ios'], default=None, help=tr('platforms_help'))
     c.add_argument("--xcode-version", default=None, help=tr('xcode_version_help'))
     c.add_argument("--ruby-version", default=None, help=tr('ruby_version_help'))
@@ -454,19 +728,32 @@ def main(argv=None):
     c.add_argument("--capability", choices=configuration.CAPABILITIES, action="append", default=[], help=tr('capability_help'))
     c.add_argument("--require-tool", action="append", default=[], help=tr('required_tool_help'))
     c.add_argument("--node-version", help=tr('node_version_help'))
+    c.add_argument("--java-version", help=tr('java_version_help'))
     sub.add_parser("profiles", help=tr('profiles_help'))
     sub.add_parser("shell-env", help=tr('shell_env_help'))
+    e = sub.add_parser("env", help=tr("env_help"))
+    e.add_argument("--json", action="store_true", dest="json_output", help=tr("env_json_help"))
     d = sub.add_parser("doctor", help=tr('doctor_help'))
     d.add_argument("--host", action="store_true", help=tr('host_help'))
+    output_group = d.add_mutually_exclusive_group()
+    output_group.add_argument("--verbose", action="store_true", help=tr("doctor_verbose_help"))
+    output_group.add_argument("--json", action="store_true", dest="json_output", help=tr("doctor_json_help"))
+    output_group.add_argument("--explain", metavar="CHECK", help=tr("doctor_explain_help"))
+    p = sub.add_parser("plan", help=tr("plan_help"))
+    p.add_argument("--host", action="store_true", help=tr("host_help"))
+    p.add_argument("--json", action="store_true", dest="json_output", help=tr("plan_json_help"))
     s = sub.add_parser("setup", help=tr('setup_help'))
     s.add_argument("--source-sdk", help=tr('sdk_help'))
     sub.add_parser("register", help=tr('register_help'))
-    sub.add_parser("start", help=tr('start_command_help'))
+    start_parser = sub.add_parser("start", help=tr('start_command_help'))
+    start_parser.add_argument("--repair", choices=("ask", "auto", "never"), default="ask",
+                              help=tr("repair_mode_help"))
     args = parser.parse_args(argv)
     try:
         if args.command == 'profiles':
+            ui.title(tr('profiles_title'))
             for name, caps in configuration.PROFILES.items():
-                print(name + ": " + (", ".join(caps) or tr('base_tools_only')))
+                ui.info(name + ": " + (", ".join(caps) or tr('base_tools_only')))
             return 0
         if args.command == 'configure':
             return configure(args)
@@ -474,16 +761,25 @@ def main(argv=None):
         if args.command == "shell-env":
             print(shell_environment(cfg, Path.home()), end="")
             return 0
+        if args.command == "env":
+            if args.json_output:
+                print(render_environment_report(cfg, Path.home(), json_output=True), end="")
+            else:
+                ui.show_environment(environment_report(cfg, Path.home()))
+            return 0
         if args.command == "doctor":
-            return 0 if doctor(cfg, host=args.host) else 1
+            return 0 if doctor(cfg, host=args.host, verbose=args.verbose,
+                               json_output=args.json_output, explain=args.explain) else 1
+        if args.command == "plan":
+            return 0 if plan(cfg, host=args.host, json_output=args.json_output) else 1
         if args.command == "setup":
             return setup(cfg, args.config, args.source_sdk)
-        return register(cfg) if args.command == "register" else start(cfg)
+        return register(cfg) if args.command == "register" else start(cfg, repair_mode=args.repair)
     except (ValueError, OSError, subprocess.SubprocessError, tarfile.TarError) as error:
-        print(tr('error', error), file=sys.stderr)
+        ui.error(tr('error', error), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print("\n" + tr("cancelled"), file=sys.stderr)
+        ui.warning(tr("cancelled"), file=sys.stderr)
         return 130
 
 

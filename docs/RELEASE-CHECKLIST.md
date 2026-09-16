@@ -36,6 +36,23 @@ The deferred checks do not block this explicitly early source publication. Keep 
 limitations visible until independently verified. Generate archives from the explicit source manifest;
 never archive a configured checkout or CI home wholesale.
 
+The reusable evidence procedure and support-claim boundaries are defined in the
+[acceptance matrix](ACCEPTANCE.md). Every future release candidate runs Level 0 from clean source;
+platform/profile claims require the corresponding higher-level evidence rather than a checkbox only.
+
+## 0.3.0-alpha.1 — runner usability
+
+Maintainer authorized commit, push and release on 2026-09-16. This remains an early
+source prerelease; publication does not close the runtime acceptance items below.
+
+- [x] Structured doctor/env/plan output, interactive/fallback UX, repair allowlist and workflow
+  recipes have offline regression coverage.
+- [x] Level 0 source/archive gate runs locally with a byte-for-byte reproducible archive.
+- [ ] Hosted Level 0 passes for the final published revision.
+- [ ] Fresh disposable CI-account setup/repeat setup and registration reuse pass for each claimed profile.
+- [ ] Real backend Docker and mobile build/recovery workflows pass on the final installed revision.
+- [ ] Independent second-Mac Level 5 is recorded; Intel remains unverified until separately evidenced.
+
 ## 0.2.0-alpha.1 — project requirements
 
 Maintainer authorized commit, push and release on 2026-09-11. This remains an early

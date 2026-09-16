@@ -10,14 +10,14 @@ COMMON = {"repository", "label", "ci_user", "minimum_free_gib", "runner_version"
 LEGACY_FIELDS = COMMON | {"platforms", "xcode_version", "ruby_version"}
 FIELDS = COMMON | {"schema_version", "capabilities", "versions", "required_tools"}
 OPTIONAL_FIELDS = {"tool_versions", "path_prepend"}
-CAPABILITIES = ("android", "docker", "ios", "node", "ruby")
+CAPABILITIES = ("android", "docker", "ios", "java", "node", "ruby")
 PROFILES = {
     "generic": (),
     "node": ("node",),
     "backend": ("docker", "node"),
-    "android": ("android", "ruby"),
+    "android": ("android", "java", "ruby"),
     "ios": ("ios", "ruby"),
-    "mobile": ("android", "ios", "ruby"),
+    "mobile": ("android", "ios", "java", "ruby"),
 }
 
 
@@ -60,14 +60,16 @@ def validate(value: dict) -> dict:
             or len(caps) != len(set(caps))):
         raise ValueError(tr("capabilities_invalid"))
     versions = value["versions"]
-    if not isinstance(versions, dict) or not set(versions) <= {"node", "ruby", "xcode"}:
+    if not isinstance(versions, dict) or not set(versions) <= {"java", "node", "ruby", "xcode"}:
         raise ValueError(tr("versions_invalid"))
     for name, version in versions.items():
         capability = "ios" if name == "xcode" else name
-        pattern = r"[1-9][0-9]{0,2}" if name == "node" else r"[0-9]+\.[0-9]+"
+        pattern = r"[1-9][0-9]{0,2}" if name in ("java", "node") else r"[0-9]+\.[0-9]+"
         if capability not in caps or not isinstance(version, str) or not re.fullmatch(pattern, version):
             raise ValueError(tr("versions_invalid"))
-    if ("ios" in caps and "xcode" not in versions) or ("ruby" in caps and "ruby" not in versions):
+    if (("ios" in caps and "xcode" not in versions)
+            or ("java" in caps and "java" not in versions)
+            or ("ruby" in caps and "ruby" not in versions)):
         raise ValueError(tr("versions_invalid"))
     tools = value["required_tools"]
     if (not isinstance(tools, list) or len(tools) > 32
@@ -92,11 +94,14 @@ def normalized(value: dict) -> dict:
                 versions=versions, required_tools=[])
 
 
-def for_profile(base: dict, profile: str, *, extra=(), tools=(), node=None, ruby="3.3", xcode="26.3") -> dict:
+def for_profile(base: dict, profile: str, *, extra=(), tools=(), java="21", node=None,
+                ruby="3.3", xcode="26.3") -> dict:
     if profile not in PROFILES:
         raise ValueError(tr("profile_invalid"))
     caps = sorted(set(PROFILES[profile]) | set(extra))
     versions = {}
+    if "java" in caps:
+        versions["java"] = java
     if "ruby" in caps:
         versions["ruby"] = ruby
     if "ios" in caps:
@@ -122,6 +127,7 @@ def validate_extensions(value: dict):
     for capability in value["capabilities"]:
         reserved.update({"node": ("node", "npm"), "ruby": ("ruby",), "ios": ("xcodebuild", "xcrun"),
                          "android": ("sdkmanager", "avdmanager", "adb", "emulator"),
+                         "java": ("java", "javac"),
                          "docker": ("docker",)}[capability])
     if reserved & set(constraints):
         raise ValueError(tr("tool_versions_invalid"))

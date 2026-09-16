@@ -18,8 +18,11 @@ workflow code, including in private repositories. [Official security guidance](h
 - Keeps registration tokens out of command arguments and kit files; no echoed-input fallback.
 - Installs root-owned wrapper code and uses a separate account; copies an SDK only when selected.
 - Validates declarative capabilities/version constraints; config cannot run install hooks or shell probes.
-- Bounds command probes and refuses remote Docker contexts before contacting a daemon.
+- Bounds command probes and refuses remote, unsafe and foreign-user Docker contexts before
+  contacting a daemon; symlinked socket paths are resolved before the ownership decision.
 - Offers offline regression tests; privileged setup is not exercised by ordinary tests.
+- Verifies bundled terminal-UI wheels by SHA-256 before root-owned installation/import and falls
+  back to standard-library output if the bundle is incomplete or modified.
 
 ## What it does not do
 
@@ -46,13 +49,18 @@ The manifest is copied at configure time; later edits to the source file cannot 
 an installed runner. Project paths are CI/Homebrew-scoped and checked before doctor probes.
 A local tool may still be malicious; PATH validation is not a dependency trust guarantee.
 
+Automatic repair is a built-in action allowlist, never manifest-provided commands. It runs as the
+dedicated CI account, never invokes sudo/package managers and reruns all readiness checks before a
+listener may start. Interactive prompts are disabled when stdin/stdout are not terminals.
+
 ## Docker workloads
 
 Docker is not installed or shared by this kit. A daemon may expose its containers, volumes
 and host mounts to anyone with socket access. Do not grant the CI account access to the
 owner's personal daemon, make sockets world-writable, or treat a local Unix endpoint as
 proof of isolation. Provision and validate an independent runtime explicitly. `doctor` only
-performs read-only context/server checks; cleanup and architecture belong to the workflow.
+performs read-only context/server checks, reports the selected endpoint and never starts a
+provider; cleanup and architecture belong to the workflow.
 
 ## Reporting
 
@@ -63,3 +71,9 @@ Do not put real secrets, private logs or exploit details in a public issue or re
 
 No supported stable releases or remediation SLA are declared yet. Security fixes and supported
 versions must be documented when the first version is released.
+
+The optional [signing recipe](docs/WORKFLOW-RECIPES.md#temporary-apple-signing-keychain-with-an-explicit-wwdr-chain)
+is project-owned example code, not provisioning behavior. It avoids System-keychain mutation and
+leaves a recovery journal, but cannot protect signing secrets from already-compromised CI-account code.
+The optional local artifact checkpoint is integrity-checked and permission-restricted, not encrypted
+or durable. Treat retained mobile binaries as CI-account data and purge them only after verified delivery.

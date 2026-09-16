@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0-alpha.1 — 2026-09-16
+
+- Added stable diagnostic identifiers and structured readiness results.
+- Added verbose, focused explanation and schema-versioned JSON doctor output without
+  exposing inherited environment values or credentials.
+- Attached detected values, responsible account and verification commands to failed checks.
+- Added fail-closed Docker failure classification, foreign-user socket detection and
+  Colima-specific remediation without installing or starting a runtime automatically.
+- Added an explicit Java capability with major-version validation and managed `JAVA_HOME`;
+  new Android/mobile profiles select Java 21 without rewriting existing configurations.
+- Added exact Homebrew remediation for common `gpg`, `actionlint` and `shellcheck` tools.
+- Added exact Xcode bundle selection with a fail-closed `DEVELOPER_DIR`, plus a safe
+  human/JSON report of wrapper-managed environment values and their sources.
+- Added opt-in workflow recipes that reject developer-home dependency paths/escaping symlinks
+  and install a pinned actionlint archive using either macOS `shasum` or GNU `sha256sum`.
+- Added an opt-in recoverable temporary signing-keychain recipe that imports a checksum-pinned
+  public Apple WWDR certificate without modifying the System keychain.
+- Added a run-bound local artifact checkpoint with SHA-256 verification, safe restore and explicit
+  purge, plus a durable pre-delivery checkpoint contract for production workflows.
+- Added a read-only `plan` command that groups failed diagnostics into ordered, account-specific
+  remediation steps with human and schema-versioned JSON output.
+- Added a staged acceptance matrix and an extended source/archive gate that reruns tests from a
+  fresh extraction and requires a byte-for-byte reproducible package.
+- Rebuilt the terminal UX on a checksum-pinned bundled Questionary stack with a verified plain-text
+  fallback, guided configuration and consistent doctor/plan/env/lifecycle rendering.
+- Integrated readiness into `start`: users can apply allowlisted automatic repair, view manual
+  steps, retry or cancel; the first repair safely starts/selects an installed CI-owned Colima runtime.
+
 ## 0.2.0-alpha.1 — 2026-09-11
 
 - Made portable project requirements the primary interface: arbitrary CLI tools,

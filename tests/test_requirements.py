@@ -59,6 +59,9 @@ class ManifestTests(unittest.TestCase):
             manifest({'capabilities': ['node'], 'required_tools': ['node'], 'tool_versions': {'node': '22'}})
         self.assertEqual(manifest({'capabilities': ['docker'], 'required_tools': ['python3'],
                                    'tool_versions': {'python3': '3.12'}})['capabilities'], ['docker'])
+        with self.assertRaises(ValueError):
+            manifest({'capabilities': ['java'], 'versions': {'java': '21'},
+                      'required_tools': ['java'], 'tool_versions': {'java': '21'}})
 
     def test_unsafe_paths_fail_at_config_time(self):
         for path in ('', '/tmp/bin', '/Users/personal/bin', '${HOME}', '${HOME}/../personal/bin',
@@ -94,7 +97,8 @@ class ManifestTests(unittest.TestCase):
             args = ['--config', str(dest), 'configure', '--repository', 'sample-org/private-app',
                     '--requirements', str(source)]
             for extra in (['--profile', 'generic'], ['--platforms', 'all'], ['--capability', 'docker'],
-                          ['--node-version', '24'], ['--require-tool', 'go'], ['--ruby-version', '3.3']):
+                          ['--java-version', '21'], ['--node-version', '24'], ['--require-tool', 'go'],
+                          ['--ruby-version', '3.3']):
                 with patch.object(runner.os, 'getuid', return_value=501), redirect_stdout(io.StringIO()):
                     self.assertEqual(runner.main(args + extra), 1)
                 self.assertFalse(dest.exists())

@@ -10,6 +10,9 @@ bash tool/runner/runner configure --repository OWNER/REPO
 bash tool/runner/runner setup
 ```
 
+In a terminal, omit the configure flags to use the arrow-key guided setup. Existing flags remain
+the reproducible interface for documentation and automation.
+
 Русский интерфейс: добавь `--lang ru` к обеим командам. Только Android: `configure --platforms android`.
 
 Switch account in a separate command:
@@ -24,6 +27,10 @@ Wait for `ci@…`, then:
 ci-runner register
 ci-runner start
 ```
+
+Before registration, `ci-runner doctor --verbose` explains readiness failures and
+`ci-runner plan` orders their fixes. `ci-runner env` shows only the environment variables
+managed by this wrapper. These reporting commands do not change the machine.
 
 Paste the token into the hidden prompt, never into a shell command. Run your prepared workflow
 with matching labels `[self-hosted, macOS, local-macos]`. Keep the Mac awake/on power;

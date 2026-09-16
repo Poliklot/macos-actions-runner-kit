@@ -5,7 +5,9 @@ import io
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -38,6 +40,14 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(value['capabilities'], ['docker', 'node'])
         self.assertEqual(value['versions'], {'node': '24'})
         self.assertNotIn('platforms', value)
+
+    def test_new_android_profiles_pin_java_without_rewriting_legacy_configs(self):
+        value = profile('android')
+        self.assertIn('java', value['capabilities'])
+        self.assertEqual(value['versions']['java'], '21')
+        legacy = config.normalized(kit.config(kit.ROOT / 'config.example.json'))
+        self.assertNotIn('java', legacy['capabilities'])
+        self.assertNotIn('java', legacy['versions'])
 
     def test_composable_capabilities_and_extra_commands(self):
         value = profile('node', extra=['docker', 'node'], tools=['terraform', 'go', 'python3.12'])
@@ -90,6 +100,15 @@ class SchemaTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 config.validate(dict(profile('node'), versions={'node': value}))
 
+    def test_java_requires_a_major_version_and_matching_capability(self):
+        value = profile('android', java='21')
+        self.assertEqual(value['versions']['java'], '21')
+        for version in ('21.0', 'v21', '0', '--help', None, 21, True):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                config.validate(dict(value, versions=dict(value['versions'], java=version)))
+        with self.assertRaises(ValueError):
+            config.validate(dict(profile(), versions={'java': '21'}))
+
     def test_extra_commands_are_names_not_scripts_paths_or_options(self):
         for tools in (['../tool'], ['/bin/sh'], ['a b'], ['$(id)'], ['--version'], ['a\nb'],
                       ['.'], ['..'], ['foo', 'foo'], [None], 'go', ['x' * 65],
@@ -112,6 +131,7 @@ class ProfileCLITests(unittest.TestCase):
             self.skipTest('configure intentionally refuses root')
         for args, expected in ((['--profile', 'generic', '--require-tool', 'terraform'], []),
                                (['--profile', 'backend', '--node-version', '24'], ['docker', 'node']),
+                               (['--profile', 'android', '--java-version', '21'], ['android', 'java', 'ruby']),
                                (['--capability', 'docker'], ['docker'])):
             with self.subTest(args=args), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / 'config.json'
@@ -135,6 +155,7 @@ class ProfileCLITests(unittest.TestCase):
     def test_conflicting_or_invalid_profile_flags_leave_no_file(self):
         for args in (['--platforms', 'ios', '--profile', 'generic'],
                      ['--profile', 'generic', '--node-version', '24'],
+                     ['--profile', 'generic', '--java-version', '21'],
                      ['--profile', 'generic', '--require-tool', '/bin/sh'],
                      ['--profile', 'generic', '--ruby-version', '3.3'],
                      ['--profile', 'node', '--xcode-version', '26.3']):
@@ -147,6 +168,12 @@ class ProfileCLITests(unittest.TestCase):
 
 
 class EnvironmentTests(unittest.TestCase):
+    def xcode(self, applications, name, version):
+        contents = applications / name / 'Contents'
+        (contents / 'Developer').mkdir(parents=True)
+        with (contents / 'version.plist').open('wb') as output:
+            plistlib.dump({'CFBundleShortVersionString': version}, output)
+
     def test_generic_does_not_inherit_mobile_or_docker_overrides(self):
         dirty = {'ANDROID_HOME': '/private/sdk', 'ANDROID_SDK_ROOT': '/private/sdk',
                  'DEVELOPER_DIR': '/private/xcode', 'DOCKER_CONFIG': '/private/docker',
@@ -185,8 +212,59 @@ class EnvironmentTests(unittest.TestCase):
 
     def test_shell_renderer_unsets_stale_profile_variables(self):
         script = kit.shell_environment(profile(), Path('/Users/ci'))
-        for name in ('ANDROID_HOME', 'ANDROID_SDK_ROOT', 'DEVELOPER_DIR', 'DOCKER_CONFIG', *kit.DOCKER_OVERRIDES):
+        for name in ('ANDROID_HOME', 'ANDROID_SDK_ROOT', 'JAVA_HOME', 'DEVELOPER_DIR',
+                     'DOCKER_CONFIG', *kit.DOCKER_OVERRIDES):
             self.assertIn('unset ' + name, script)
+
+    def test_java_home_is_derived_from_ci_path_not_inherited_android_studio(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            jdk = home / 'jdk'
+            (jdk / 'bin').mkdir(parents=True)
+            (jdk / 'bin/java').write_text('#!/bin/sh\n')
+            (jdk / 'bin/java').chmod(0o755)
+            (jdk / 'release').write_text('JAVA_VERSION="21"\n')
+            cfg = profile('generic', extra=['java'])
+            cfg['path_prepend'] = ['${HOME}/jdk/bin']
+            with patch.dict(os.environ, {'JAVA_HOME': '/Applications/Android Studio.app/Contents/jbr'}):
+                env = kit.environment(cfg, home)
+            self.assertEqual(env['JAVA_HOME'], str(jdk.resolve()))
+            self.assertNotIn('Android Studio', env['PATH'])
+
+    def test_xcode_is_selected_by_exact_bundle_version_not_global_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            applications = Path(directory)
+            self.xcode(applications, 'Xcode.app', '26.6')
+            self.xcode(applications, 'Xcode_custom.app', '26.3')
+            selected = workloads.xcode_selection('26.3', applications=applications)
+            self.assertTrue(selected.ready)
+            self.assertEqual(selected.developer_dir,
+                             applications / 'Xcode_custom.app/Contents/Developer')
+            env = kit.environment(profile('ios'), Path('/Users/ci'), applications=applications)
+            self.assertEqual(env['DEVELOPER_DIR'], str(selected.developer_dir))
+
+    def test_xcode_selection_fails_closed_when_missing_or_ambiguous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            applications = Path(directory)
+            self.xcode(applications, 'Xcode.app', '26.6')
+            missing = workloads.xcode_selection('26.3', applications=applications)
+            self.assertEqual(missing.status, 'missing')
+            self.assertFalse(missing.developer_dir.exists())
+            self.xcode(applications, 'Xcode_26.3.app', '26.3')
+            self.xcode(applications, 'Xcode_copy.app', '26.3')
+            ambiguous = workloads.xcode_selection('26.3', applications=applications)
+            self.assertEqual(ambiguous.status, 'ambiguous')
+            self.assertFalse(ambiguous.developer_dir.exists())
+            self.assertEqual(len(ambiguous.matches), 2)
+
+    def test_environment_report_contains_only_allowlisted_managed_variables(self):
+        with patch.dict(os.environ, {'SECRET_FIXTURE': 'must-not-be-printed'}):
+            report = kit.environment_report(profile('backend'), Path('/Users/ci_backend'))
+        serialized = json.dumps(report)
+        self.assertNotIn('SECRET_FIXTURE', serialized)
+        self.assertNotIn('must-not-be-printed', serialized)
+        self.assertEqual([item['name'] for item in report['variables']], list(kit.MANAGED_VARS))
+        self.assertEqual(report['scope'], 'managed-runner-environment')
 
 
 class ProbeTests(unittest.TestCase):
@@ -197,10 +275,28 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(workloads.node_ready(output, {}, major), expected)
             output.assert_called_once_with(['node', '--version'], {})
 
+    def test_java_version_parses_modern_jdks_only(self):
+        for value, expected in ((('openjdk version "21.0.8" 2025-07-15'), '21'),
+                                (('java version "25" 2025-09-16'), '25'),
+                                (('openjdk 21.0.8'), None), ('', None)):
+            with self.subTest(value=value):
+                self.assertEqual(workloads.java_version(value), expected)
+
     def test_local_docker_is_probed_without_starting_containers(self):
-        output = Mock(side_effect=[(True, '{"Host":"unix:///Users/ci/.docker/run/docker.sock"}'), (True, '29.4.0')])
-        self.assertTrue(workloads.docker_ready(output, {}))
-        self.assertEqual(output.call_args.args[0], ['docker', '--host', 'unix:///Users/ci/.docker/run/docker.sock',
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'docker.sock'
+            server = socket.socket(socket.AF_UNIX)
+            self.addCleanup(server.close)
+            server.bind(str(path))
+            host = 'unix://' + str(path)
+            output = Mock(side_effect=[(True, 'ci-local'), (True, json.dumps({'Host': host})),
+                                       (True, '29.4.0')])
+            probe = workloads.docker_probe(output, {}, home=Path('/Users/ci'),
+                                           which=lambda name, **_: '/fixture/' + name)
+        self.assertTrue(probe.ready)
+        self.assertEqual(probe.context, 'ci-local')
+        self.assertEqual(probe.server_version, '29.4.0')
+        self.assertEqual(output.call_args.args[0], ['docker', '--host', host,
                                                    'info', '--format', '{{.ServerVersion}}'])
 
     def test_remote_malformed_or_unsafe_context_never_contacts_daemon(self):
@@ -208,18 +304,42 @@ class ProbeTests(unittest.TestCase):
                         '{"Host":"unix:///tmp/../private/docker.sock"}', '{"Host":null}',
                         '{}', '[]', 'null', 'not json', '{"Host":"unix://relative"}'):
             with self.subTest(context=context):
-                output = Mock(return_value=(True, context))
-                self.assertFalse(workloads.docker_ready(output, {}))
-                self.assertEqual(output.call_count, 1)
+                output = Mock(side_effect=[(True, 'unsafe'), (True, context)])
+                probe = workloads.docker_probe(output, {}, home=Path('/Users/ci'),
+                                               which=lambda name, **_: '/fixture/' + name)
+                self.assertFalse(probe.ready)
+                self.assertEqual(output.call_count, 2)
 
     def test_missing_cli_or_offline_daemon_fails(self):
-        self.assertFalse(workloads.docker_ready(Mock(return_value=(False, '')), {}))
-        output = Mock(side_effect=[(True, '{"Host":"unix:///tmp/docker.sock"}'), (False, '')])
-        self.assertFalse(workloads.docker_ready(output, {}))
+        missing = workloads.docker_probe(Mock(), {}, home=Path('/Users/ci'),
+                                         which=lambda *_args, **_kwargs: None)
+        self.assertEqual(missing.status, 'cli-missing')
+        no_context = workloads.docker_probe(Mock(return_value=(False, '')), {},
+                                            home=Path('/Users/ci'),
+                                            which=lambda name, **_: '/fixture/' + name)
+        self.assertEqual(no_context.status, 'context-missing')
+
+    def test_missing_socket_reports_provider_and_foreign_user_socket_is_rejected(self):
+        def which(name, **_):
+            return '/opt/homebrew/bin/' + name if name in ('docker', 'colima') else None
+        output = Mock(side_effect=[(True, 'colima'),
+                                   (True, '{"Host":"unix:///Users/ci/.colima/default/docker.sock"}')])
+        probe = workloads.docker_probe(output, {}, home=Path('/Users/ci'), which=which)
+        self.assertEqual(probe.status, 'socket-missing')
+        self.assertEqual(probe.providers, ('colima',))
+
+        foreign = Mock(side_effect=[(True, 'personal'),
+                                    (True, '{"Host":"unix:///Users/owner/.orbstack/run/docker.sock"}')])
+        probe = workloads.docker_probe(foreign, {}, home=Path('/Users/ci'), which=which)
+        self.assertEqual(probe.status, 'foreign-user-socket')
+        self.assertEqual(foreign.call_count, 2)
 
     def test_command_probes_are_bounded(self):
         with patch.object(kit, 'run', side_effect=subprocess.TimeoutExpired('docker', 15)) as run:
             self.assertEqual(kit.output(['docker', 'info']), (False, ''))
+        self.assertEqual(run.call_args.kwargs['timeout'], 15)
+        with patch.object(kit, 'run', side_effect=subprocess.TimeoutExpired('java', 15)) as run:
+            self.assertEqual(kit.output_all(['java', '-version']), (False, ''))
         self.assertEqual(run.call_args.kwargs['timeout'], 15)
 
 
@@ -259,13 +379,31 @@ class DoctorTests(unittest.TestCase):
                 return True, 'v24.1.0'
             if args == ['npm', '--version']:
                 return True, '11.0.0'
-            if args[:3] == ['docker', 'context', 'inspect']:
-                return True, '{"Host":"unix:///fixture/docker.sock"}'
-            if args[:3] == ['docker', '--host', 'unix:///fixture/docker.sock']:
-                return True, '29.4.0'
             self.fail('Unexpected command: ' + repr(args))
-        with patch.object(kit, 'output', side_effect=output):
+        docker = workloads.DockerProbe('ready', cli='/fixture/docker', context='ci-local',
+                                       host='unix:///fixture/docker.sock',
+                                       socket='/fixture/docker.sock', server_version='29.4.0')
+        with patch.object(kit, 'output', side_effect=output), \
+                patch.object(workloads, 'docker_probe', return_value=docker):
             self.assertTrue(kit.doctor(profile('backend', node='24'), print_report=False))
+
+    def test_java_capability_checks_selected_home_and_exact_major(self):
+        cfg = profile('generic', extra=['java'])
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            jdk = home / 'jdk'
+            (jdk / 'bin').mkdir(parents=True)
+            (jdk / 'bin/java').write_text('#!/bin/sh\n')
+            (jdk / 'bin/java').chmod(0o755)
+            (jdk / 'release').touch()
+            cfg['path_prepend'] = ['${HOME}/jdk/bin']
+            self.which.side_effect = lambda name, **_: str(jdk / 'bin/java') if name == 'java' else '/fixture/tool'
+            with patch.object(kit.Path, 'home', return_value=home), \
+                    patch.object(kit, 'output_all', return_value=(True, 'openjdk version "21.0.8"')):
+                self.assertTrue(kit.doctor(cfg, print_report=False))
+            with patch.object(kit.Path, 'home', return_value=home), \
+                    patch.object(kit, 'output_all', return_value=(True, 'openjdk version "25"')):
+                self.assertFalse(kit.doctor(cfg, print_report=False))
 
     def test_host_preflight_does_not_contact_owner_docker_daemon(self):
         def output(args, env):
@@ -321,7 +459,7 @@ class ProvisioningTests(unittest.TestCase):
 
     def test_provisioner_installs_every_import_and_uses_one_environment_renderer(self):
         source = (kit.ROOT / 'provision.sh').read_text()
-        for name in ('configuration.py', 'workloads.py'):
+        for name in ('configuration.py', 'workloads.py', 'repair.py', 'ui.py'):
             self.assertEqual(source.count(name), 2)
         self.assertIn('"$HOME/bin/ci-runner" shell-env >', source)
         self.assertNotIn('CI_RUBY=', source)

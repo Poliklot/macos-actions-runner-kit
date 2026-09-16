@@ -22,8 +22,23 @@ done
 source "$kit/messages.sh"
 fail() { msg error "$(msg "$@")" >&2; exit 1; }
 [[ $(id -u) == 0 ]] || fail provision_platform
-for name in runner runner.py configuration.py workloads.py keychain_state.py ios_platform_probe.py provision.sh i18n.py messages.json messages.sh; do
+for name in runner runner.py configuration.py diagnostics.py workloads.py repair.py ui.py keychain_state.py ios_platform_probe.py provision.sh i18n.py messages.json messages.sh; do
   [[ -f "$kit/$name" && ! -L "$kit/$name" ]] || fail provision_source "$name"
+done
+ui_wheels=(questionary-2.1.1-py3-none-any.whl prompt_toolkit-3.0.53-py3-none-any.whl wcwidth-0.8.3-py3-none-any.whl)
+ui_wheel_hash() {
+  case "$1" in
+    questionary-2.1.1-py3-none-any.whl) echo a51af13f345f1cdea62347589fbb6df3b290306ab8930713bfae4d475a7d4a59 ;;
+    prompt_toolkit-3.0.53-py3-none-any.whl) echo 01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2 ;;
+    wcwidth-0.8.3-py3-none-any.whl) echo d5b73dba6158a595ec9370350e7f2637bcac8d6c5e4fde34f30fcffb6103a5e4 ;;
+    *) return 1 ;;
+  esac
+}
+for name in "${ui_wheels[@]}"; do
+  path="$kit/vendor/$name"
+  [[ -f "$path" && ! -L "$path" ]] || fail provision_source "vendor/$name"
+  [[ $(/usr/bin/shasum -a 256 "$path" | /usr/bin/awk '{print $1}') == "$(ui_wheel_hash "$name")" ]] ||
+    fail provision_source "vendor/$name"
 done
 field() { /usr/bin/plutil -extract "$1" raw -o - "$configuration"; }
 ci_user=$(field ci_user)
@@ -42,7 +57,7 @@ case "$ci_user" in root|admin|daemon|nobody|guest) fail provision_user_required 
 [[ -z "$xcode" || "$xcode" =~ ^[0-9]+\.[0-9]+$ ]] || fail provision_versions
 [[ -z "$ruby" || "$ruby" =~ ^[0-9]+\.[0-9]+$ ]] || fail provision_versions
 [[ "$minimum_free_gib" =~ ^[0-9]+$ && "$minimum_free_gib" -ge 20 && "$minimum_free_gib" -le 1000 ]] || fail provision_disk
-capability_pattern='^\[("(android|docker|ios|node|ruby)"(,"(android|docker|ios|node|ruby)")*)?\]$'
+capability_pattern='^\[("(android|docker|ios|java|node|ruby)"(,"(android|docker|ios|java|node|ruby)")*)?\]$'
 [[ "$capabilities" =~ $capability_pattern ]] || fail capabilities_invalid
 [[ "$capabilities" != *ios* || -n "$xcode" ]] || fail provision_versions
 [[ "$capabilities" != *ruby* || -n "$ruby" ]] || fail provision_versions
@@ -53,7 +68,7 @@ install_parent='/Library/Application Support/Local Actions'
 installed=$install_parent/$ci_user
 
 # Validate every ancestor used by privileged mkdir/copy/chown, not just the leaf.
-directories=("$home" "$home/Library" "$home/bin" '/Library/Application Support' "$install_parent" "$installed")
+directories=("$home" "$home/Library" "$home/bin" '/Library/Application Support' "$install_parent" "$installed" "$installed/vendor")
 if [[ "$capabilities" == *android* ]]; then
   directories+=("$home/Library/Android" "$sdk")
 fi
@@ -137,10 +152,14 @@ fi
 
 # Code installed outside the checkout is root-owned and can be read by ci even
 # when the administrator's personal home directory is private.
-/usr/bin/install -d -o root -g wheel -m 755 "$install_parent" "$installed"
-for name in runner runner.py configuration.py workloads.py keychain_state.py ios_platform_probe.py provision.sh i18n.py messages.json messages.sh; do
+/usr/bin/install -d -o root -g wheel -m 755 "$install_parent" "$installed" "$installed/vendor"
+for name in runner runner.py configuration.py diagnostics.py workloads.py repair.py ui.py keychain_state.py ios_platform_probe.py provision.sh i18n.py messages.json messages.sh; do
   [[ ! -L "$installed/$name" ]] || fail provision_source_symlink
   /usr/bin/install -o root -g wheel -m 644 "$kit/$name" "$installed/$name"
+done
+for name in "${ui_wheels[@]}"; do
+  [[ ! -L "$installed/vendor/$name" ]] || fail provision_source_symlink
+  /usr/bin/install -o root -g wheel -m 644 "$kit/vendor/$name" "$installed/vendor/$name"
 done
 [[ ! -L "$installed/config.json" ]] || fail provision_config_symlink
 /usr/bin/install -o root -g wheel -m 644 "$configuration" "$installed/config.json"

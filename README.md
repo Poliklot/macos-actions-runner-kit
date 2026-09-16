@@ -38,13 +38,20 @@ If you extracted elsewhere, use that actual folder. Stop if a command fails.
 
 ## 2. Choose your private repository
 
-Replace `OWNER/REPO` with the repository **whose jobs you want to run**, not this helper's public repository:
+Start the guided setup and choose the private repository, workload, label and CI account:
+
+```bash
+bash runner configure
+```
+
+For a reproducible non-interactive command, replace `OWNER/REPO` with the repository **whose jobs
+you want to run**, not this helper's public repository:
 
 ```bash
 bash runner configure --repository OWNER/REPO --profile mobile
 ```
 
-This creates an ignored, non-secret `tool/runner/config.json`. Nothing contacts GitHub or requests sudo.
+Both paths create an ignored, non-secret `tool/runner/config.json`. Nothing contacts GitHub or requests sudo.
 For one platform, use `--profile android` or `--profile ios`; use `--profile generic` without mobile SDKs.
 
 Alternative: use your reviewed project requirements file instead of `--profile mobile`:
@@ -64,7 +71,7 @@ The installer prepares the account and `ci-runner`; it copies an Android SDK onl
 
 > [!NOTE]
 > Start with a developer Mac: Python 3.12+, `git`, `curl`, `jq`, `gh`;
-> Ruby 3.3 for mobile profiles; Xcode 26.3 for iOS; full Android SDK and JDK for Android.
+> Ruby 3.3 for mobile profiles; Xcode 26.3 for iOS; full Android SDK and JDK 21 for new Android/mobile profiles.
 > Keep **20 GiB free**, plus space for an SDK copy when Android is selected. The installer reports missing tools;
 > it does not install Xcode, accept Apple licences or make your account an administrator.
 > For iOS, also install **Platform Support** in Xcode → Settings → Components.
@@ -96,18 +103,38 @@ Under `ci` (in a new terminal, run `sudo -iu ci` first):
 ci-runner start
 ```
 
+Startup now includes an interactive readiness screen. When something is missing, choose with the
+arrow keys: safely repair what the CI account owns, show the complete manual plan, retry, or cancel.
+See the [interactive UX and repair boundaries](docs/INTERACTIVE-UX.md). For scripts, use
+`start --repair auto|never`; redirected `ask` never waits for input.
+
 Wait for **Listening for Jobs**. Start your prepared GitHub workflow manually with
 `runner=self-hosted`. [The repository maintainer must integrate a workflow first](docs/INTEGRATION.md).
 Keep the terminal/lid open and the Mac on power. After **all workflow jobs** finish, press **Ctrl+C**.
 Enter `exit` to return to your account. Registration is kept for next time.
 
 > [!TIP]
-> Check prerequisites: `ci-runner doctor`. Russian: `ci-runner --lang ru doctor`.
+> Check prerequisites: `ci-runner doctor`. Use `ci-runner doctor --verbose` and
+> `ci-runner doctor --explain CHECK` for details, or `ci-runner doctor --json` for automation.
+> `ci-runner plan` turns all current failures into an ordered, account-specific remediation plan;
+> it is read-only and also supports `--host` and `--json`.
+> Use `ci-runner env` (or `ci-runner env --json`) to see only the environment values
+> managed by the wrapper and where they came from; inherited variables and secrets are omitted.
+> Russian: `ci-runner --lang ru doctor`.
 > To update, stop the runner and repeat setup from reviewed new source. See [operations](tool/runner/OPERATIONS.md).
+
+Release/support claims follow the staged [acceptance matrix](docs/ACCEPTANCE.md); offline tests alone
+do not prove a fresh CI account, signed delivery, a second Mac or Intel compatibility.
 
 This kit prepares a runner, **not a universal signed Flutter release pipeline**.
 Project build commands, signing, credential cleanup and delivery remain the workflow owner's responsibility.
+Reusable [workflow portability recipes](docs/WORKFLOW-RECIPES.md) cover developer-home path checks
+and a checksum-verified macOS actionlint installer without changing a project's CI automatically.
 
 For backend, select `--profile backend` and follow the [Node workflow example](examples/manual-node-ci.yml).
+New Android/mobile configurations pin `JAVA_HOME`; if Flutter still prefers Android Studio's
+JDK, the project workflow must run `flutter config --jdk-dir="$JAVA_HOME"`.
+The iOS integration selects exactly one installed Xcode by the version declared inside its
+bundle. It never falls back to a different global `xcode-select` version.
 Legacy mobile configs/commands remain supported. New profiles do not enable automatic PR jobs
 or install a Docker daemon. Update an installed kit only after all jobs have stopped.

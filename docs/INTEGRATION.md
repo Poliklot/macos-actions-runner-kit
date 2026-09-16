@@ -40,6 +40,10 @@ One CI account/registration per repository remains mandatory, even on the same M
 - Design signing rollback/cleanup for cancellation and failure; account for no default keychain.
 - Test Android/iOS signing and external delivery separately. The kit supplies none of these project-specific contracts.
 
+Before dependency installation, add the reviewed [portability and actionlint recipes](WORKFLOW-RECIPES.md).
+They catch developer-home lockfile paths and avoid the Linux-only `sha256sum` assumption without
+making either check part of privileged runner provisioning.
+
 Only people/code you trust should have access to a runner-enabled repository. A label is routing,
 not authorization; someone able to change workflows may bypass your example's safeguards.
 Standard users can still reach the network and read files their permissions allow.

@@ -182,6 +182,11 @@ class LifecycleTests(unittest.TestCase):
         probe = patch.object(kit, "ios_platform_available", return_value=True)
         self.platform_probe = probe.start()
         self.addCleanup(probe.stop)
+        xcode = patch.object(kit.workloads, "xcode_selection", return_value=kit.workloads.XcodeSelection(
+            "ready", "26.3", Path("/Applications/Xcode_26.3.app/Contents/Developer"),
+            ("/Applications/Xcode_26.3.app/Contents/Developer",), ("Xcode_26.3.app=26.3",)))
+        xcode.start()
+        self.addCleanup(xcode.stop)
 
     def test_admin_cannot_register_or_start(self):
         with patch.object(kit, "current_ci", return_value=False), patch.object(kit, "run") as run:

@@ -32,8 +32,8 @@ All fields are optional. `{}` selects only the base runner, not mobile defaults.
 | `tool_versions` | Optional numeric version prefixes for selected `required_tools`: `3`, `3.12` or `3.12.8` |
 | `path_prepend` | Up to 16 tool directories, searched after protected `~/bin` and before built-in tool paths |
 | `minimum_free_gib` | Required free space, integer 20–1000; default 20 |
-| `capabilities` | Optional built-in integration checks: `docker`, `node`, `ruby`, `android`, `ios`; default empty |
-| `versions` | Constraints for selected integrations: Node major, Ruby major.minor, Xcode major.minor |
+| `capabilities` | Optional built-in integration checks: `docker`, `java`, `node`, `ruby`, `android`, `ios`; default empty |
+| `versions` | Constraints for selected integrations: Java/Node major, Ruby/Xcode major.minor |
 
 For `tool_versions`, `doctor` executes only `COMMAND --version`, under the CI account,
 with a 15-second timeout. The first stdout line must contain one unambiguous stable dotted
@@ -55,10 +55,12 @@ No dependencies are copied/installed automatically except the explicitly selecte
 ## Built-in integrations and optional shortcuts
 
 - `docker`: CLI and reachable **local Unix-socket daemon** in the CI account's own context.
+- `java`: exact major JDK selection, managed `JAVA_HOME` and `java -version` check.
 - `node`: Node.js + npm; optional `versions.node` major constraint.
 - `ruby`: Ruby; requires `versions.ruby`.
 - `android`: copied SDK/JDK/emulator readiness; does **not** implicitly require Ruby.
-- `ios`: Xcode and actual iOS device destination; requires `versions.xcode`; no implicit Ruby.
+- `ios`: one exact Xcode bundle version and an actual iOS device destination; requires
+  `versions.xcode`; no implicit Ruby and no fallback to the global `xcode-select` choice.
 
 These integrations have special environment/setup logic; they are not a list of allowed
 languages. Combine any of them with arbitrary tools, or select no integrations at all.
@@ -66,7 +68,7 @@ languages. Combine any of them with arbitrary tools, or select no integrations a
 CLI shorthand remains available: repeat `--capability` and `--require-tool`.
 `--profile generic|node|backend|android|ios|mobile` merely expands a convenience preset;
 `bash runner profiles` lists the expansion. Mobile presets include Ruby for compatibility.
-`--node-version`, `--ruby-version` and `--xcode-version` constrain those shortcuts.
+`--java-version`, `--node-version`, `--ruby-version` and `--xcode-version` constrain those shortcuts.
 Use either a requirements file **or** workload flags, never an ambiguous merge of both.
 
 ## Setup, checks and updates
@@ -80,6 +82,13 @@ It does not contact the owner's daemon and is not a CI-account acceptance check.
 `doctor`. If CI-local tools are missing it may return incomplete **after installing the CLI**.
 Prepare those tools under CI, then rerun `ci-runner doctor`. Registration/start remain blocked
 until readiness passes. Doctor, runner and generated login-shell settings share one PATH renderer.
+`ci-runner env` reports the wrapper-owned PATH/SDK/JDK/Xcode/Docker variables and their sources;
+`--json` provides schema 1. It never dumps the inherited process environment.
+
+For iOS, selection scans complete `Xcode*.app` bundles in `/Applications` and reads their
+declared version. Exactly one bundle must match. Missing and duplicate matches use a nonexistent
+`DEVELOPER_DIR`, so probes/jobs fail instead of silently compiling with a different global Xcode.
+Bundle renaming is supported; symlinked or incomplete bundles are not selected.
 
 Legacy configs (`platforms`, `ruby_version`, `xcode_version`) and `--platforms` still work.
 For compatibility, `configure` without any workload flags retains the old mobile default;
@@ -87,6 +96,16 @@ use a requirements file or `--profile generic` to choose the base explicitly.
 Legacy settings normalize to schema v2 in memory; source files are never rewritten.
 New v2 fields `tool_versions`/`path_prepend` default to empty if absent.
 Unknown fields/schema versions fail closed. An older wrapper cannot read new fields.
+
+New `android` and `mobile` profiles include Java 21. Existing legacy and previously created
+schema-v2 configs keep their declared capabilities unchanged during an update. To adopt the
+managed JDK contract, create and review a fresh requirements file/config while the runner is stopped.
+The kit derives `JAVA_HOME` only from a complete JDK found in its managed PATH; it does not
+silently use Android Studio's bundled Java. Flutter projects should still bind Flutter explicitly:
+
+```bash
+flutter config --jdk-dir="$JAVA_HOME"
+```
 
 To change requirements: stop all jobs/listeners, prepare a fresh local config from reviewed
 source and rerun setup with the same repository/user/label. This regenerates login settings
@@ -100,6 +119,26 @@ CI must have its own working local context and daemon. Inherited Docker endpoint
 variables are cleared. Remote SSH/TCP contexts are rejected before contacting a daemon.
 Do not share a personal daemon or relax socket permissions: Docker exposes containers,
 volumes and host-mounted files. Isolated runtime and per-job cleanup remain your responsibility.
+
+Run `ci-runner doctor --explain docker` under the CI account for the selected context,
+endpoint, failure class and exact next step. The probe distinguishes a missing CLI or context,
+remote SSH/TCP contexts, unsafe or foreign-user sockets, missing/invalid sockets, permissions
+and an unreachable daemon. It never contacts a rejected remote or foreign-user endpoint.
+
+If Homebrew already provides `docker` and `colima`, a dedicated CI account can create its
+own default runtime without sharing the administrator's Docker Desktop or OrbStack state:
+
+```bash
+sudo -iu ci_backend
+colima start --runtime docker
+docker context show
+docker info --format '{{.ServerVersion}}'
+ci-runner doctor --explain docker
+```
+
+Choose CPU, memory and disk deliberately for the project rather than copying example values.
+Colima lifecycle, upgrades, resource sizing and cleanup remain explicit operator decisions;
+`doctor` detects and explains but never installs or starts a virtual machine.
 
 Green doctor is not proof of project builds, PostgreSQL E2E, amd64 emulation, signing or
 store delivery. Test the exact workflow separately. A dedicated user is not a VM sandbox.

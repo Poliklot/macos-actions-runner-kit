@@ -1,3 +1,31 @@
+# Runner usability — local verification, 2026-09-16
+
+This section records local Level 0 evidence for the unreleased runner-usability work. It is not
+hosted, independent-machine or installed-runner acceptance.
+
+- The extended acceptance gate passed on macOS/arm64: 158 offline tests passed in the source tree
+  and the same 158 passed from a fresh allowlisted archive extraction.
+- Rebuilding the archive from that extraction was byte-for-byte identical; runtime/private paths
+  were absent. The gate printed the resulting SHA-256 for external evidence capture.
+- Exact Xcode discovery selected the installed 26.3 bundle rather than the global 26.1.1 bundle.
+  Missing/duplicate selection, inherited environment removal and safe human/JSON env output have regressions.
+- Docker context/socket failure classes, Java 21 selection, ordered remediation plans, portability
+  checks, signing-state validation and artifact checkpoint tamper/cross-run rejection have regressions.
+- The pinned actionlint 1.7.12 arm64 recipe was downloaded from its official GitHub release,
+  checksum-verified, extracted and executed successfully on this Mac.
+- The pinned Questionary/prompt_toolkit/wcwidth wheels were hash-verified and imported directly
+  from the source bundle; an actual PTY smoke selected the default automatic-repair menu entry.
+  Offline regressions cover plain fallback, guided configuration, cancel-without-change and the
+  allowlisted Colima command sequence without sudo.
+
+Not executed: updating the installed `ci_backend` wrapper, starting its Docker runtime, privileged
+fresh/repeat setup, a real private workflow with the new revision, actual Apple private-key import,
+simulated external delivery failure, hosted CI for the final revision, Intel, or a second Mac.
+Those remain open in the [release checklist](RELEASE-CHECKLIST.md) and
+[acceptance matrix](ACCEPTANCE.md); no stable/production-ready claim follows from this local gate.
+
+---
+
 # Project requirements — 0.2.0-alpha.1 verification, 2026-09-11
 
 Early source release; the installed runner was not updated or re-registered.
