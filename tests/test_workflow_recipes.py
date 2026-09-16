@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PORTABILITY = ROOT / "examples/scripts/check-macos-portability.py"
 ACTIONLINT = ROOT / "examples/scripts/install-actionlint-macos.sh"
+SIGNING = ROOT / "examples/scripts/apple-signing-keychain.py"
 
 
 class PortabilityRecipeTests(unittest.TestCase):
@@ -55,6 +56,25 @@ class ActionlintRecipeTests(unittest.TestCase):
         self.assertNotIn("curl |", source)
         self.assertRegex(source, r"arm64_sha256=[0-9a-f]{64}")
         self.assertRegex(source, r"amd64_sha256=[0-9a-f]{64}")
+
+
+class AppleSigningRecipeTests(unittest.TestCase):
+    def test_requires_explicit_command_and_never_modifies_system_keychain(self):
+        result = subprocess.run([sys.executable, str(SIGNING)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        source = SIGNING.read_text()
+        self.assertIn('Path.home() / "Library/Caches"', source)
+        self.assertIn('APPLE_WWDR_SHA256', source)
+        self.assertNotIn('/Library/Keychains/System.keychain', source)
+        self.assertNotIn('sudo', source)
+
+    def test_invalid_state_name_fails_before_security_or_secret_access(self):
+        import os
+        env = dict(os.environ, SIGNING_STATE_NAME='../escape-signing-state')
+        result = subprocess.run([sys.executable, str(SIGNING), 'cleanup'], env=env,
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('SIGNING_STATE_NAME', result.stderr)
 
 
 if __name__ == "__main__":

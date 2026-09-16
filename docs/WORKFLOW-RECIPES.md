@@ -48,3 +48,44 @@ also valid; choose one ownership model rather than silently downloading `latest`
 Recipes do not grant trust to a workflow or dependency. Keep immutable action references, locked
 dependencies, explicit timeouts, minimum-scoped secrets and project-specific cleanup. Never route
 untrusted pull requests to a persistent personal Mac.
+
+## Temporary Apple signing keychain with an explicit WWDR chain
+
+A signing identity alone is not enough: `codesign` also needs the Apple Worldwide Developer
+Relations intermediate certificate chain. Do not depend on whatever a developer happened to
+install in the System keychain. Copy `examples/scripts/apple-signing-keychain.py` and keep the
+required public WWDR certificate in a reviewed project location with a pinned SHA-256. Download
+that public certificate only from Apple's [certificate authority page](https://www.apple.com/certificateauthority/).
+The private `.p12` remains a scoped workflow secret and must never be committed.
+
+Prepare the keychain before signing:
+
+```bash
+SIGNING_STATE_NAME=mobile-signing-state \
+SIGNING_CERTIFICATE_PATH="$RUNNER_TEMP/distribution.p12" \
+SIGNING_CERTIFICATE_PASSWORD="$APPLE_CERTIFICATE_PASSWORD" \
+APPLE_WWDR_CERTIFICATE_PATH="$GITHUB_WORKSPACE/tool/ci/AppleWWDRCAG3.cer" \
+APPLE_WWDR_SHA256="reviewed-lowercase-sha256" \
+python3 tool/ci/apple-signing-keychain.py prepare
+```
+
+Then verify the intended identity and perform the project's normal signed build. Add a separate
+`if: always()` cleanup step; it needs no signing secrets:
+
+```bash
+SIGNING_STATE_NAME=mobile-signing-state \
+python3 tool/ci/apple-signing-keychain.py cleanup-if-present
+```
+
+The helper creates only a temporary **user** keychain, imports the pinned public WWDR certificate
+and private identity, makes it the job default, checks for a valid code-signing identity, and
+records the previous user-keychain list/default in a mode-0600 recovery journal under
+`~/Library/Caches/*-signing-state`. Successful cleanup restores that state and deletes the temporary
+keychain. It never changes the System keychain, installs a provisioning profile, chooses a signing
+identity, notarizes, or delivers an app. If power loss leaves the journal behind, `ci-runner doctor`
+blocks startup; inspect it and run `cleanup` rather than deleting the evidence.
+
+`security` necessarily receives the temporary generated keychain password and imported `.p12`
+password while it runs. Keep the CI account dedicated, do not enable shell tracing, delete the
+workflow-created `.p12`/profile files in the project's own always-cleanup step, and scope/revoke
+the upstream secret independently.

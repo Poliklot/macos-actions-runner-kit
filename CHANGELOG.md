@@ -15,6 +15,8 @@
   human/JSON report of wrapper-managed environment values and their sources.
 - Added opt-in workflow recipes that reject developer-home dependency paths/escaping symlinks
   and install a pinned actionlint archive using either macOS `shasum` or GNU `sha256sum`.
+- Added an opt-in recoverable temporary signing-keychain recipe that imports a checksum-pinned
+  public Apple WWDR certificate without modifying the System keychain.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 

@@ -22,6 +22,7 @@
   "examples/manual-smoke.yml",
   "examples/requirements-backend.json",
   "examples/requirements-python-rust.json",
+  "examples/scripts/apple-signing-keychain.py",
   "examples/scripts/check-macos-portability.py",
   "examples/scripts/install-actionlint-macos.sh",
   "runner",

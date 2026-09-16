@@ -65,3 +65,7 @@ Do not put real secrets, private logs or exploit details in a public issue or re
 
 No supported stable releases or remediation SLA are declared yet. Security fixes and supported
 versions must be documented when the first version is released.
+
+The optional [signing recipe](docs/WORKFLOW-RECIPES.md#temporary-apple-signing-keychain-with-an-explicit-wwdr-chain)
+is project-owned example code, not provisioning behavior. It avoids System-keychain mutation and
+leaves a recovery journal, but cannot protect signing secrets from already-compromised CI-account code.
