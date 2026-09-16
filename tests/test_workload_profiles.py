@@ -459,7 +459,7 @@ class ProvisioningTests(unittest.TestCase):
 
     def test_provisioner_installs_every_import_and_uses_one_environment_renderer(self):
         source = (kit.ROOT / 'provision.sh').read_text()
-        for name in ('configuration.py', 'workloads.py'):
+        for name in ('configuration.py', 'workloads.py', 'repair.py', 'ui.py'):
             self.assertEqual(source.count(name), 2)
         self.assertIn('"$HOME/bin/ci-runner" shell-env >', source)
         self.assertNotIn('CI_RUBY=', source)

@@ -3,8 +3,8 @@
 This section records local Level 0 evidence for the unreleased runner-usability work. It is not
 hosted, independent-machine or installed-runner acceptance.
 
-- The extended acceptance gate passed on macOS/arm64: 149 offline tests passed in the source tree
-  and the same 149 passed from a fresh allowlisted archive extraction.
+- The extended acceptance gate passed on macOS/arm64: 158 offline tests passed in the source tree
+  and the same 158 passed from a fresh allowlisted archive extraction.
 - Rebuilding the archive from that extraction was byte-for-byte identical; runtime/private paths
   were absent. The gate printed the resulting SHA-256 for external evidence capture.
 - Exact Xcode discovery selected the installed 26.3 bundle rather than the global 26.1.1 bundle.
@@ -13,6 +13,10 @@ hosted, independent-machine or installed-runner acceptance.
   checks, signing-state validation and artifact checkpoint tamper/cross-run rejection have regressions.
 - The pinned actionlint 1.7.12 arm64 recipe was downloaded from its official GitHub release,
   checksum-verified, extracted and executed successfully on this Mac.
+- The pinned Questionary/prompt_toolkit/wcwidth wheels were hash-verified and imported directly
+  from the source bundle; an actual PTY smoke selected the default automatic-repair menu entry.
+  Offline regressions cover plain fallback, guided configuration, cancel-without-change and the
+  allowlisted Colima command sequence without sudo.
 
 Not executed: updating the installed `ci_backend` wrapper, starting its Docker runtime, privileged
 fresh/repeat setup, a real private workflow with the new revision, actual Apple private-key import,

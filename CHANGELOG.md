@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-alpha.1 — 2026-09-16
 
 - Added stable diagnostic identifiers and structured readiness results.
 - Added verbose, focused explanation and schema-versioned JSON doctor output without
@@ -23,6 +23,10 @@
   remediation steps with human and schema-versioned JSON output.
 - Added a staged acceptance matrix and an extended source/archive gate that reruns tests from a
   fresh extraction and requires a byte-for-byte reproducible package.
+- Rebuilt the terminal UX on a checksum-pinned bundled Questionary stack with a verified plain-text
+  fallback, guided configuration and consistent doctor/plan/env/lifecycle rendering.
+- Integrated readiness into `start`: users can apply allowlisted automatic repair, view manual
+  steps, retry or cancel; the first repair safely starts/selects an installed CI-owned Colima runtime.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 

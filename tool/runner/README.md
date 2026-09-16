@@ -10,6 +10,9 @@ bash tool/runner/runner configure --repository OWNER/REPO
 bash tool/runner/runner setup
 ```
 
+In a terminal, omit the configure flags to use the arrow-key guided setup. Existing flags remain
+the reproducible interface for documentation and automation.
+
 Русский интерфейс: добавь `--lang ru` к обеим командам. Только Android: `configure --platforms android`.
 
 Switch account in a separate command:

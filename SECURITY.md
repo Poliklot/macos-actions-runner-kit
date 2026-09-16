@@ -21,6 +21,8 @@ workflow code, including in private repositories. [Official security guidance](h
 - Bounds command probes and refuses remote, unsafe and foreign-user Docker contexts before
   contacting a daemon; symlinked socket paths are resolved before the ownership decision.
 - Offers offline regression tests; privileged setup is not exercised by ordinary tests.
+- Verifies bundled terminal-UI wheels by SHA-256 before root-owned installation/import and falls
+  back to standard-library output if the bundle is incomplete or modified.
 
 ## What it does not do
 
@@ -46,6 +48,10 @@ No arbitrary arguments, regexes, environment exports or privileged install hooks
 The manifest is copied at configure time; later edits to the source file cannot hot-reconfigure
 an installed runner. Project paths are CI/Homebrew-scoped and checked before doctor probes.
 A local tool may still be malicious; PATH validation is not a dependency trust guarantee.
+
+Automatic repair is a built-in action allowlist, never manifest-provided commands. It runs as the
+dedicated CI account, never invokes sudo/package managers and reruns all readiness checks before a
+listener may start. Interactive prompts are disabled when stdin/stdout are not terminals.
 
 ## Docker workloads
 

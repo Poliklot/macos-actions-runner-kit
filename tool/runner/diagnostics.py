@@ -21,6 +21,7 @@ class CheckResult:
     verify: str | None = None
     actor: str | None = None
     docs: str | None = None
+    automation: str | None = None
 
     def json_value(self) -> dict:
         value = asdict(self)

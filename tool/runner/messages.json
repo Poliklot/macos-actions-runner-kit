@@ -354,8 +354,8 @@
     "en": "Archive is missing %s"
   },
   "registration_url": {
-    "ru": "\nОткрой https://github.com/%s/settings/actions/runners/new",
-    "en": "\nOpen https://github.com/%s/settings/actions/runners/new"
+    "ru": "Открой https://github.com/%s/settings/actions/runners/new",
+    "en": "Open https://github.com/%s/settings/actions/runners/new"
   },
   "error": {
     "ru": "ОШИБКА: %s",
@@ -709,6 +709,10 @@
     "ru": "Показать профили без конфигурации и изменений компьютера",
     "en": "List profiles without configuration or machine changes"
   },
+  "profiles_title": {
+    "ru": "Доступные профили runner",
+    "en": "Available runner profiles"
+  },
   "base_tools_only": {
     "ru": "только базовые инструменты runner",
     "en": "runner base tools only"
@@ -852,5 +856,153 @@
   "plan_footer": {
     "ru": "Выполняй шаги по порядку и после каждого повторяй ci-runner plan. Команда plan ничего не устанавливает, не запускает и не удаляет.",
     "en": "Apply steps in order and rerun ci-runner plan after each one. The plan command installs, starts and deletes nothing."
+  },
+  "ui_invalid_choice": {
+    "ru": "Выбери один из указанных вариантов.",
+    "en": "Choose one of the listed options."
+  },
+  "ui_select_instruction": {
+    "ru": "(стрелки или цифра, Enter — выбрать)",
+    "en": "(arrow keys or number, Enter to select)"
+  },
+  "ui_yes": {
+    "ru": "Да",
+    "en": "Yes"
+  },
+  "ui_no": {
+    "ru": "Нет",
+    "en": "No"
+  },
+  "ui_doctor_title": {
+    "ru": "Проверка окружения",
+    "en": "Environment check"
+  },
+  "repair_mode_help": {
+    "ru": "Поведение при проблемах: спросить, безопасно исправить автоматически или только показать",
+    "en": "Failure behavior: ask, apply safe automatic repairs, or only report"
+  },
+  "repair_question": {
+    "ru": "Как поступить с найденными проблемами?",
+    "en": "How should the detected problems be handled?"
+  },
+  "repair_choice_automatic": {
+    "ru": "Исправить автоматически доступные проблемы (%s)",
+    "en": "Automatically repair available problems (%s)"
+  },
+  "repair_choice_instructions": {
+    "ru": "Показать пошаговую инструкцию и выйти",
+    "en": "Show step-by-step instructions and exit"
+  },
+  "repair_choice_retry": {
+    "ru": "Повторить проверку",
+    "en": "Run the checks again"
+  },
+  "repair_choice_cancel": {
+    "ru": "Отменить запуск",
+    "en": "Cancel startup"
+  },
+  "repair_cancelled": {
+    "ru": "Запуск отменён; окружение не изменялось дальше.",
+    "en": "Startup was cancelled; no further environment changes were made."
+  },
+  "repair_title": {
+    "ru": "Автоматическое исправление",
+    "en": "Automatic remediation"
+  },
+  "repair_docker_colima": {
+    "ru": "Запустить отдельный Colima runtime и выбрать его Docker context",
+    "en": "Start the dedicated Colima runtime and select its Docker context"
+  },
+  "repair_docker_done": {
+    "ru": "Colima запущен, локальный Docker context выбран.",
+    "en": "Colima is running and its local Docker context is selected."
+  },
+  "repair_tools_missing": {
+    "ru": "Для автоматического исправления нужны установленные команды colima и docker.",
+    "en": "Automatic remediation requires installed colima and docker commands."
+  },
+  "repair_command_failed": {
+    "ru": "Команда завершилась с ошибкой: %s",
+    "en": "Command failed: %s"
+  },
+  "repair_unknown": {
+    "ru": "Неизвестное автоматическое действие заблокировано: %s",
+    "en": "Unknown automatic action was blocked: %s"
+  },
+  "configure_interactive_required": {
+    "ru": "Укажи --repository OWNER/REPO или запусти configure в интерактивном терминале.",
+    "en": "Pass --repository OWNER/REPO or run configure in an interactive terminal."
+  },
+  "configure_wizard_title": {
+    "ru": "Настройка нового runner",
+    "en": "Configure a new runner"
+  },
+  "configure_repository_question": {
+    "ru": "Какой приватный репозиторий будет использовать runner?",
+    "en": "Which private repository will use this runner?"
+  },
+  "configure_profile_question": {
+    "ru": "Какой тип задач будет выполнять runner?",
+    "en": "Which workload type will this runner execute?"
+  },
+  "configure_label_question": {
+    "ru": "Метка GitHub runner",
+    "en": "GitHub runner label"
+  },
+  "configure_user_question": {
+    "ru": "Имя отдельного CI-пользователя macOS",
+    "en": "Dedicated macOS CI account name"
+  },
+  "configure_profile_generic": {
+    "ru": "Базовый — только инструменты runner",
+    "en": "Generic — runner tools only"
+  },
+  "configure_profile_backend": {
+    "ru": "Backend — Node.js и Docker",
+    "en": "Backend — Node.js and Docker"
+  },
+  "configure_profile_android": {
+    "ru": "Android — SDK, Java и Ruby",
+    "en": "Android — SDK, Java and Ruby"
+  },
+  "configure_profile_ios": {
+    "ru": "iOS — Xcode и Ruby",
+    "en": "iOS — Xcode and Ruby"
+  },
+  "configure_profile_mobile": {
+    "ru": "Mobile — Android и iOS",
+    "en": "Mobile — Android and iOS"
+  },
+  "configure_profile_node": {
+    "ru": "Node.js без Docker",
+    "en": "Node.js without Docker"
+  },
+  "readiness_title": {
+    "ru": "Готовность runner к запуску",
+    "en": "Runner startup readiness"
+  },
+  "readiness_passed": {
+    "ru": "Проверок пройдено: %s",
+    "en": "Checks passed: %s"
+  },
+  "readiness_automatic": {
+    "ru": "Можно исправить автоматически: %s",
+    "en": "Can be repaired automatically: %s"
+  },
+  "readiness_manual": {
+    "ru": "Требуют действий человека: %s",
+    "en": "Require operator action: %s"
+  },
+  "readiness_can_repair": {
+    "ru": "доступно автоисправление",
+    "en": "automatic repair available"
+  },
+  "readiness_needs_operator": {
+    "ru": "нужно исправить вручную",
+    "en": "manual action required"
+  },
+  "readiness_continue": {
+    "ru": "Окружение готово — запускаю GitHub runner.",
+    "en": "Environment is ready — starting the GitHub runner."
   }
 }

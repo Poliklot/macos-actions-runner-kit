@@ -40,9 +40,13 @@ The reusable evidence procedure and support-claim boundaries are defined in the
 [acceptance matrix](ACCEPTANCE.md). Every future release candidate runs Level 0 from clean source;
 platform/profile claims require the corresponding higher-level evidence rather than a checkbox only.
 
-## Unreleased runner-usability acceptance
+## 0.3.0-alpha.1 — runner usability
 
-- [x] Structured doctor/env/plan output and workflow recipes have offline regression coverage.
+Maintainer authorized commit, push and release on 2026-09-16. This remains an early
+source prerelease; publication does not close the runtime acceptance items below.
+
+- [x] Structured doctor/env/plan output, interactive/fallback UX, repair allowlist and workflow
+  recipes have offline regression coverage.
 - [x] Level 0 source/archive gate runs locally with a byte-for-byte reproducible archive.
 - [ ] Hosted Level 0 passes for the final published revision.
 - [ ] Fresh disposable CI-account setup/repeat setup and registration reuse pass for each claimed profile.

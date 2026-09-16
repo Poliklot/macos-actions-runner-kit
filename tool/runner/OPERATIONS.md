@@ -93,6 +93,12 @@ For decommissioning, remove the runner in GitHub settings first, review/revoke w
 credentials and only then remove the dedicated account/data using macOS administration tools.
 No automated destructive uninstall is provided.
 
+Before the listener starts, an interactive terminal offers safe automatic remediation, the manual
+plan, retry or cancel. `start --repair auto|never` makes the behavior explicit. The automatic
+allowlist initially covers only an already-installed CI-owned Colima runtime/context; it does not
+cross into administrator/package/Xcode/signing/project responsibilities. Every repair is followed
+by the complete doctor, and the listener stays blocked until all checks pass.
+
 ## Signing and recovery
 
 This kit does not install certificates, profiles or a signed release workflow.

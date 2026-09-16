@@ -33,6 +33,11 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("cause", value["checks"][0])
         self.assertEqual(value["checks"][1]["status"], "required")
 
+    def test_json_exposes_only_allowlisted_automation_identifier(self):
+        report = Report([CheckResult("docker.daemon", False, "Docker", "fix",
+                                     automation="docker.colima")], host=False)
+        self.assertEqual(json.loads(report.json_text())["checks"][0]["automation"], "docker.colima")
+
     def test_human_failure_answers_what_why_who_fix_and_verify(self):
         report = Report([CheckResult(
             "docker.daemon", False, "Docker daemon", "Start isolated Colima",

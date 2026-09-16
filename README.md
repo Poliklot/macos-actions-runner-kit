@@ -38,13 +38,20 @@ If you extracted elsewhere, use that actual folder. Stop if a command fails.
 
 ## 2. Choose your private repository
 
-Replace `OWNER/REPO` with the repository **whose jobs you want to run**, not this helper's public repository:
+Start the guided setup and choose the private repository, workload, label and CI account:
+
+```bash
+bash runner configure
+```
+
+For a reproducible non-interactive command, replace `OWNER/REPO` with the repository **whose jobs
+you want to run**, not this helper's public repository:
 
 ```bash
 bash runner configure --repository OWNER/REPO --profile mobile
 ```
 
-This creates an ignored, non-secret `tool/runner/config.json`. Nothing contacts GitHub or requests sudo.
+Both paths create an ignored, non-secret `tool/runner/config.json`. Nothing contacts GitHub or requests sudo.
 For one platform, use `--profile android` or `--profile ios`; use `--profile generic` without mobile SDKs.
 
 Alternative: use your reviewed project requirements file instead of `--profile mobile`:
@@ -95,6 +102,11 @@ Under `ci` (in a new terminal, run `sudo -iu ci` first):
 ```bash
 ci-runner start
 ```
+
+Startup now includes an interactive readiness screen. When something is missing, choose with the
+arrow keys: safely repair what the CI account owns, show the complete manual plan, retry, or cancel.
+See the [interactive UX and repair boundaries](docs/INTERACTIVE-UX.md). For scripts, use
+`start --repair auto|never`; redirected `ask` never waits for input.
 
 Wait for **Listening for Jobs**. Start your prepared GitHub workflow manually with
 `runner=self-hosted`. [The repository maintainer must integrate a workflow first](docs/INTEGRATION.md).

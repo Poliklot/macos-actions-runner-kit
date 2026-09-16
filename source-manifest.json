@@ -15,6 +15,7 @@
   "THIRD_PARTY.md",
   "docs/ACCEPTANCE.md",
   "docs/INTEGRATION.md",
+  "docs/INTERACTIVE-UX.md",
   "docs/RELEASE-CHECKLIST.md",
   "docs/VERIFICATION.md",
   "docs/WORKFLOW-RECIPES.md",
@@ -40,6 +41,7 @@
   "tests/test_requirements.py",
   "tests/test_runner_kit.py",
   "tests/test_runner_localization.py",
+  "tests/test_ui.py",
   "tests/test_workflow_recipes.py",
   "tests/test_workload_profiles.py",
   "tool/runner/OPERATIONS.md",
@@ -53,7 +55,12 @@
   "tool/runner/messages.json",
   "tool/runner/messages.sh",
   "tool/runner/provision.sh",
+  "tool/runner/repair.py",
   "tool/runner/runner",
   "tool/runner/runner.py",
+  "tool/runner/ui.py",
+  "tool/runner/vendor/prompt_toolkit-3.0.53-py3-none-any.whl",
+  "tool/runner/vendor/questionary-2.1.1-py3-none-any.whl",
+  "tool/runner/vendor/wcwidth-0.8.3-py3-none-any.whl",
   "tool/runner/workloads.py"
 ]

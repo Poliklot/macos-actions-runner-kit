@@ -32,6 +32,8 @@ from ios_platform_probe import available as ios_platform_available
 import i18n
 import configuration
 import workloads
+import repair
+import ui
 from diagnostics import CheckResult, RemediationPlan, Report
 from i18n import tr
 
@@ -52,6 +54,34 @@ def configure(args):
     """Create non-secret local settings without root, network or overwriting files."""
     if os.getuid() == 0:
         raise ValueError(tr('setup_no_root'))
+    if args.repository is None:
+        if not ui.interactive():
+            raise ValueError(tr("configure_interactive_required"))
+        ui.title(tr("configure_wizard_title"))
+        args.repository = ui.input_text(tr("configure_repository_question"), default="OWNER/REPO")
+        if args.repository is None:
+            raise KeyboardInterrupt
+        if (args.profile is None and not args.capability and not args.require_tool
+                and args.requirements is None and args.platforms is None):
+            profile_choices = [
+                (tr("configure_profile_generic"), "generic"),
+                (tr("configure_profile_backend"), "backend"),
+                (tr("configure_profile_android"), "android"),
+                (tr("configure_profile_ios"), "ios"),
+                (tr("configure_profile_mobile"), "mobile"),
+                (tr("configure_profile_node"), "node"),
+            ]
+            args.profile = ui.select(tr("configure_profile_question"), profile_choices,
+                                     default="mobile")
+            if args.profile is None:
+                raise KeyboardInterrupt
+        args.label = ui.input_text(tr("configure_label_question"),
+                                   default=args.label or "local-macos")
+        args.ci_user = ui.input_text(tr("configure_user_question"), default=args.ci_user or "ci")
+        if args.label is None or args.ci_user is None:
+            raise KeyboardInterrupt
+    args.label = args.label or "local-macos"
+    args.ci_user = args.ci_user or "ci"
     if args.config.exists() or args.config.is_symlink():
         raise ValueError(tr('config_exists'))
     if args.repository.lower() in ('owner/repo', 'your-org/your-repo', 'example/mobile-app'):
@@ -88,7 +118,7 @@ def configure(args):
         raise ValueError(tr('config_exists')) from None
     with os.fdopen(fd, 'w', encoding='utf-8') as output_file:
         output_file.write(json.dumps(value, indent=2) + '\n')
-    print(tr('configured', args.config, shlex.quote(str(args.config.resolve()))))
+    ui.success(tr('configured', args.config, shlex.quote(str(args.config.resolve()))))
     return 0
 
 
@@ -270,9 +300,9 @@ def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
     rows: list[CheckResult] = []
 
     def check(check_id, ok, title, fix, *, detected=None, cause=None, verify=None,
-              actor=None, docs=None):
+              actor=None, docs=None, automation=None):
         rows.append(CheckResult(check_id, bool(ok), title, fix, detected, cause,
-                                verify, actor, docs))
+                                verify, actor, docs, automation))
 
     system = platform.system()
     machine = platform.machine()
@@ -348,7 +378,9 @@ def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
                   detected=docker.detected(), cause=None if docker.ready else cause,
                   actor=tr("actor_ci"),
                   verify="docker context show && docker info --format '{{.ServerVersion}}'",
-                  docs="https://github.com/Poliklot/macos-actions-runner-kit/blob/main/docs/WORKLOADS.md#docker-and-acceptance-boundaries")
+                  docs="https://github.com/Poliklot/macos-actions-runner-kit/blob/main/docs/WORKLOADS.md#docker-and-acceptance-boundaries",
+                  automation=("docker.colima" if not docker.ready and "colima" in docker.providers
+                              and docker.status not in ("cli-missing", "endpoint-unsafe") else None))
     if "ios" in caps:
         selection = workloads.xcode_selection(versions["xcode"])
         selection_causes = {
@@ -427,17 +459,68 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True, verbose=False,
         if json_output:
             print(report.json_text(), end="")
         else:
-            print(report.human_text(verbose=verbose, explain=explain,
-                                    docker_host_note=host and "docker" in configuration.normalized(cfg)["capabilities"]),
-                  end="")
+            ui.show_report(report, verbose=verbose, explain=explain,
+                           docker_host_note=host and "docker" in configuration.normalized(cfg)["capabilities"])
     return report.ready
 
 
 def plan(cfg: dict, *, host=False, json_output=False) -> bool:
     """Print an ordered read-only remediation plan without changing the machine."""
     result = RemediationPlan(doctor_report(cfg, host=host))
-    print(result.json_text() if json_output else result.human_text(), end="")
+    if json_output:
+        print(result.json_text(), end="")
+    else:
+        ui.show_plan(result)
     return result.ready
+
+
+def interactive_readiness(cfg: dict, *, repair_mode="ask") -> bool | None:
+    """Check, optionally repair safe CI-owned state, and return None on user cancellation."""
+    report = doctor_report(cfg)
+    ui.show_readiness_summary(report)
+    if report.ready:
+        return True
+    if repair_mode == "never" or (repair_mode == "ask" and not ui.interactive()):
+        ui.show_plan(RemediationPlan(report))
+        return False
+
+    attempted: set[str] = set()
+    while not report.ready:
+        actions = [action for action in repair.available(report) if action.action_id not in attempted]
+        if repair_mode == "auto":
+            choice = "automatic" if actions else "instructions"
+        else:
+            choices = []
+            if actions:
+                choices.append((tr("repair_choice_automatic", len(actions)), "automatic"))
+            choices.extend(((tr("repair_choice_instructions"), "instructions"),
+                            (tr("repair_choice_retry"), "retry"),
+                            (tr("repair_choice_cancel"), "cancel")))
+            choice = ui.select(tr("repair_question"), choices,
+                               default="automatic" if actions else "instructions")
+        if choice is None or choice == "cancel":
+            ui.warning(tr("repair_cancelled"))
+            return None
+        if choice == "instructions":
+            ui.show_plan(RemediationPlan(report))
+            return False
+        if choice == "retry":
+            report = doctor_report(cfg)
+            ui.show_readiness_summary(report)
+            continue
+        ui.title(tr("repair_title"))
+        env = environment(cfg, Path.home())
+        for action in actions:
+            attempted.add(action.action_id)
+            ui.info(action.title)
+            ok, message = repair.apply(action, env=env, run=run)
+            (ui.success if ok else ui.error)(message)
+        report = doctor_report(cfg)
+        ui.show_readiness_summary(report)
+        if repair_mode == "auto" and not report.ready:
+            ui.show_plan(RemediationPlan(report))
+            return False
+    return True
 
 
 def setup(cfg, config_path, source_sdk):
@@ -455,7 +538,7 @@ def setup(cfg, config_path, source_sdk):
            if "android" in cfg["capabilities"] else Path("/"))
     if not doctor(cfg, host=True, sdk=sdk):
         return 1
-    print(tr('setup_start', cfg["ci_user"]), flush=True)
+    ui.title(tr('setup_start', cfg["ci_user"]))
     # Freeze validated settings for this setup; never rewrite the legacy source.
     # sudo runs outside the administrator's private checkout. Only known source
     # files are installed; configuration contains no executable hooks.
@@ -486,7 +569,7 @@ def download_runner(cfg, target, arch):
         temporary = Path(temporary)
         archive = temporary / "runner.tar.gz"
         digest = hashlib.sha256()
-        print(tr('download', version, arch), flush=True)
+        ui.title(tr('download', version, arch))
         with urllib.request.urlopen(url, timeout=120) as source, archive.open("wb") as destination:
             while chunk := source.read(1024**2):
                 digest.update(chunk)
@@ -523,12 +606,17 @@ def read_registration_token():
     # Fail closed instead of getpass's fallback to an echoed stdin read.
     if not sys.stdin.isatty():
         raise ValueError(tr("token_terminal"))
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", getpass.GetPassWarning)
-        try:
-            token = getpass.getpass(tr("token_prompt"))
-        except (getpass.GetPassWarning, EOFError):
-            raise ValueError(tr("token_terminal")) from None
+    if ui.interactive():
+        token = ui.password(tr("token_prompt"))
+        if token is None:
+            raise ValueError(tr("token_terminal"))
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", getpass.GetPassWarning)
+            try:
+                token = getpass.getpass(tr("token_prompt"))
+            except (getpass.GetPassWarning, EOFError):
+                raise ValueError(tr("token_terminal")) from None
     # Reject pasted commands, braces, spaces, control characters and PATs.
     # Do not assume a fixed token length or prefix that GitHub may change.
     if (not re.fullmatch(r"[A-Za-z0-9_-]{16,256}", token)
@@ -543,15 +631,15 @@ def register(cfg):
         return 1
     target = runner_directory(Path.home())
     if registration_matches(target, cfg):
-        print(tr('already_registered'))
+        ui.success(tr('already_registered'))
         return 0
     if not target.exists():
         download_runner(cfg, target, "arm64" if platform.machine() == "arm64" else "x64")
     elif not (target / ".kit-download.json").is_file():
         raise ValueError(tr('unknown_install'))
-    print(tr('registration_url', cfg["repository"]))
-    print(tr("token_help"), flush=True)
-    print(tr("registration_defaults", cfg["label"]), flush=True)
+    ui.title(tr('registration_url', cfg["repository"]))
+    ui.info(tr("token_help"))
+    ui.info(tr("registration_defaults", cfg["label"]))
     token = read_registration_token()
     host_name = re.sub(r"[^a-zA-Z0-9_-]", "-", socket.gethostname().split(".")[0])[:24]
     # Teammates can have identical default Mac hostnames; never replace theirs.
@@ -560,7 +648,7 @@ def register(cfg):
     # Official supported input, consumed and masked by Runner.Listener.
     # The token never appears in argv, shell history, config.json or our logs.
     env["ACTIONS_RUNNER_INPUT_TOKEN"] = token
-    print(tr("registering"), flush=True)
+    ui.title(tr("registering"))
     try:
         result = run(["/bin/bash", "./config.sh", "--unattended", "--url", f'https://github.com/{cfg["repository"]}',
                       "--name", name, "--labels", cfg["label"], "--work", "_work"],
@@ -573,20 +661,27 @@ def register(cfg):
     if result.returncode == 0 and not registration_matches(target, cfg):
         raise ValueError(tr('registration_missing'))
     if result.returncode == 0:
-        print(tr('registration_ok'))
+        ui.success(tr('registration_ok'))
     else:
-        print(tr("registration_failed"), file=sys.stderr)
+        ui.error(tr("registration_failed"), file=sys.stderr)
         if re.search(r"\b(401|403|404)\b", diagnostic):
-            print(tr("registration_auth_hint"), file=sys.stderr)
-        print(tr("original_output"), file=sys.stderr)
-        print(diagnostic, file=sys.stderr)
+            ui.warning(tr("registration_auth_hint"), file=sys.stderr)
+        ui.info(tr("original_output"), file=sys.stderr)
+        ui.text(diagnostic, file=sys.stderr)
     return result.returncode
 
 
-def start(cfg):
+def start(cfg, *, repair_mode="ask"):
     require_ci(cfg)
-    if not doctor(cfg):
-        return 1
+    if repair_mode == "never" or (repair_mode == "ask" and not ui.interactive()):
+        if not doctor(cfg):
+            return 1
+    else:
+        readiness = interactive_readiness(cfg, repair_mode=repair_mode)
+        if readiness is None:
+            return 130
+        if not readiness:
+            return 1
     target = runner_directory(Path.home())
     if not registration_matches(target, cfg):
         raise ValueError(tr('register_first'))
@@ -598,8 +693,8 @@ def start(cfg):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError(tr('session_running')) from None
-        print(tr('start_help'), flush=True)
-        print(tr("original_output"), flush=True)
+        ui.title(tr('start_help'))
+        ui.info(tr("original_output"))
         # Same foreground process group: terminal Ctrl+C reaches the official
         # runner. Parent ignores KeyboardInterrupt until that runner exits.
         child = subprocess.Popen(["/usr/bin/caffeinate", "-i", "/bin/bash", "./run.sh"],
@@ -608,23 +703,23 @@ def start(cfg):
             try:
                 return child.wait()
             except KeyboardInterrupt:
-                print(tr('stopping'), flush=True)
+                ui.warning(tr('stopping'))
 
 
 def main(argv=None):
     try:
         argv = i18n.select(list(sys.argv[1:] if argv is None else argv))
     except (ValueError, OSError) as error:
-        print(tr("error", error), file=sys.stderr)
+        ui.error(tr("error", error), file=sys.stderr)
         return 2
     parser = i18n.Parser(prog="ci-runner", description=tr('description'))
     parser.add_argument("--lang", metavar="ru|en", help=tr("language_help"))
     parser.add_argument("--config", type=Path, default=ROOT / "config.json", help=tr("config_help"))
     sub = parser.add_subparsers(dest="command", required=True)
     c = sub.add_parser("configure", help=tr('configure_help'))
-    c.add_argument("--repository", required=True, help=tr('repository_help'))
-    c.add_argument("--label", default="local-macos", help=tr('label_help'))
-    c.add_argument("--ci-user", default="ci", help=tr('ci_user_help'))
+    c.add_argument("--repository", help=tr('repository_help'))
+    c.add_argument("--label", default=None, help=tr('label_help'))
+    c.add_argument("--ci-user", default=None, help=tr('ci_user_help'))
     c.add_argument("--platforms", choices=['all', 'android', 'ios'], default=None, help=tr('platforms_help'))
     c.add_argument("--xcode-version", default=None, help=tr('xcode_version_help'))
     c.add_argument("--ruby-version", default=None, help=tr('ruby_version_help'))
@@ -650,12 +745,15 @@ def main(argv=None):
     s = sub.add_parser("setup", help=tr('setup_help'))
     s.add_argument("--source-sdk", help=tr('sdk_help'))
     sub.add_parser("register", help=tr('register_help'))
-    sub.add_parser("start", help=tr('start_command_help'))
+    start_parser = sub.add_parser("start", help=tr('start_command_help'))
+    start_parser.add_argument("--repair", choices=("ask", "auto", "never"), default="ask",
+                              help=tr("repair_mode_help"))
     args = parser.parse_args(argv)
     try:
         if args.command == 'profiles':
+            ui.title(tr('profiles_title'))
             for name, caps in configuration.PROFILES.items():
-                print(name + ": " + (", ".join(caps) or tr('base_tools_only')))
+                ui.info(name + ": " + (", ".join(caps) or tr('base_tools_only')))
             return 0
         if args.command == 'configure':
             return configure(args)
@@ -664,7 +762,10 @@ def main(argv=None):
             print(shell_environment(cfg, Path.home()), end="")
             return 0
         if args.command == "env":
-            print(render_environment_report(cfg, Path.home(), json_output=args.json_output), end="")
+            if args.json_output:
+                print(render_environment_report(cfg, Path.home(), json_output=True), end="")
+            else:
+                ui.show_environment(environment_report(cfg, Path.home()))
             return 0
         if args.command == "doctor":
             return 0 if doctor(cfg, host=args.host, verbose=args.verbose,
@@ -673,12 +774,12 @@ def main(argv=None):
             return 0 if plan(cfg, host=args.host, json_output=args.json_output) else 1
         if args.command == "setup":
             return setup(cfg, args.config, args.source_sdk)
-        return register(cfg) if args.command == "register" else start(cfg)
+        return register(cfg) if args.command == "register" else start(cfg, repair_mode=args.repair)
     except (ValueError, OSError, subprocess.SubprocessError, tarfile.TarError) as error:
-        print(tr('error', error), file=sys.stderr)
+        ui.error(tr('error', error), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print("\n" + tr("cancelled"), file=sys.stderr)
+        ui.warning(tr("cancelled"), file=sys.stderr)
         return 130
 
 
