@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path, PurePosixPath
+import plistlib
 import re
 import shutil
 import stat
@@ -24,6 +25,60 @@ def java_version(text: str) -> str | None:
         return None
     # Java 8 and earlier report 1.8; modern pinned toolchains use their real major.
     return match[1]
+
+
+@dataclass(frozen=True)
+class XcodeSelection:
+    """Exact, fail-closed Xcode bundle selection."""
+
+    status: str
+    required: str
+    developer_dir: Path
+    matches: tuple[str, ...] = ()
+    discovered: tuple[str, ...] = ()
+
+    @property
+    def ready(self) -> bool:
+        return self.status == "ready"
+
+    def detected(self) -> str:
+        values = [f"required: {self.required}"]
+        if self.matches:
+            values.append("matches: " + ", ".join(self.matches))
+        if self.discovered:
+            values.append("installed: " + ", ".join(self.discovered))
+        values.append(f"DEVELOPER_DIR: {self.developer_dir}")
+        return "; ".join(values)
+
+
+def xcode_selection(required: str, *, applications: Path = Path("/Applications")) -> XcodeSelection:
+    """Select one bundle by its declared version, never by the active global Xcode."""
+    matches: list[str] = []
+    discovered: list[str] = []
+    for bundle in sorted(applications.glob("Xcode*.app"), key=lambda value: value.name):
+        version_file = bundle / "Contents/version.plist"
+        developer_dir = bundle / "Contents/Developer"
+        if bundle.is_symlink() or not bundle.is_dir() or not developer_dir.is_dir():
+            discovered.append(f"{bundle.name}=invalid")
+            continue
+        try:
+            with version_file.open("rb") as source:
+                value = plistlib.load(source).get("CFBundleShortVersionString")
+        except (OSError, ValueError, TypeError, plistlib.InvalidFileException):
+            value = None
+        if not isinstance(value, str):
+            discovered.append(f"{bundle.name}=unknown")
+            continue
+        discovered.append(f"{bundle.name}={value}")
+        if value == required:
+            matches.append(str(developer_dir))
+    # An invalid directory makes every accidental xcodebuild invocation fail instead
+    # of falling through to xcode-select or an inherited DEVELOPER_DIR.
+    fail_closed = applications / ".local-ci-xcode-selection-required" / required
+    if len(matches) == 1:
+        return XcodeSelection("ready", required, Path(matches[0]), tuple(matches), tuple(discovered))
+    status = "missing" if not matches else "ambiguous"
+    return XcodeSelection(status, required, fail_closed, tuple(matches), tuple(discovered))
 
 
 @dataclass(frozen=True)

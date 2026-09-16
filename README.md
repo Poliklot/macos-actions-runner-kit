@@ -104,6 +104,8 @@ Enter `exit` to return to your account. Registration is kept for next time.
 > [!TIP]
 > Check prerequisites: `ci-runner doctor`. Use `ci-runner doctor --verbose` and
 > `ci-runner doctor --explain CHECK` for details, or `ci-runner doctor --json` for automation.
+> Use `ci-runner env` (or `ci-runner env --json`) to see only the environment values
+> managed by the wrapper and where they came from; inherited variables and secrets are omitted.
 > Russian: `ci-runner --lang ru doctor`.
 > To update, stop the runner and repeat setup from reviewed new source. See [operations](tool/runner/OPERATIONS.md).
 
@@ -113,5 +115,7 @@ Project build commands, signing, credential cleanup and delivery remain the work
 For backend, select `--profile backend` and follow the [Node workflow example](examples/manual-node-ci.yml).
 New Android/mobile configurations pin `JAVA_HOME`; if Flutter still prefers Android Studio's
 JDK, the project workflow must run `flutter config --jdk-dir="$JAVA_HOME"`.
+The iOS integration selects exactly one installed Xcode by the version declared inside its
+bundle. It never falls back to a different global `xcode-select` version.
 Legacy mobile configs/commands remain supported. New profiles do not enable automatic PR jobs
 or install a Docker daemon. Update an installed kit only after all jobs have stopped.

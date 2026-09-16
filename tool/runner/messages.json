@@ -768,5 +768,65 @@
   "tool_version_fix": {
     "ru": "Проверь версию в CI-аккаунте. Используется только --version, первая строка, точный числовой префикс; остальные проверки — в workflow.",
     "en": "Check the CI-account version. Uses only --version, first line, exact numeric prefix; other checks belong in the workflow."
+  },
+  "xcode_selection_title": {
+    "ru": "Однозначно выбран требуемый Xcode",
+    "en": "Required Xcode is selected unambiguously"
+  },
+  "xcode_selection_ready": {
+    "ru": "Найдена ровно одна подходящая Xcode.app по версии внутри bundle.",
+    "en": "Exactly one matching Xcode.app bundle version was found."
+  },
+  "xcode_selection_missing": {
+    "ru": "В /Applications нет полного Xcode с точно требуемой версией; глобальный xcode-select намеренно не используется.",
+    "en": "No complete Xcode with the exact required version exists in /Applications; global xcode-select is intentionally ignored."
+  },
+  "xcode_selection_ambiguous": {
+    "ru": "Найдено несколько полных Xcode с одной требуемой версией, поэтому выбор заблокирован.",
+    "en": "Multiple complete Xcode bundles have the required version, so selection is blocked."
+  },
+  "xcode_selection_fix": {
+    "ru": "Под администратором оставь в /Applications ровно один полный Xcode %s, заверши его первый запуск и повтори doctor.",
+    "en": "As the administrator, keep exactly one complete Xcode %s in /Applications, finish first launch, and rerun doctor."
+  },
+  "env_help": {
+    "ru": "Показать управляемое окружение runner без унаследованных переменных и секретов",
+    "en": "Show the runner-managed environment without inherited variables or secrets"
+  },
+  "env_json_help": {
+    "ru": "Вывести управляемое окружение в JSON",
+    "en": "Print the managed environment as JSON"
+  },
+  "env_title": {
+    "ru": "Управляемое окружение runner (только чтение):",
+    "en": "Runner-managed environment (read-only):"
+  },
+  "env_source": {
+    "ru": "источник",
+    "en": "source"
+  },
+  "env_unset": {
+    "ru": "<не задано>",
+    "en": "<unset>"
+  },
+  "env_source_path": {
+    "ru": "детерминированный PATH профиля",
+    "en": "deterministic profile PATH"
+  },
+  "env_source_android": {
+    "ru": "Android capability и домашний каталог CI-пользователя",
+    "en": "Android capability and CI account home"
+  },
+  "env_source_java": {
+    "ru": "полный JDK, найденный в управляемом PATH",
+    "en": "complete JDK found in the managed PATH"
+  },
+  "env_source_xcode": {
+    "ru": "точная версия внутри Xcode bundle; при ошибке используется несуществующий fail-closed путь",
+    "en": "exact Xcode bundle version; failures use a nonexistent fail-closed path"
+  },
+  "env_source_docker": {
+    "ru": "изолированный Docker config CI-пользователя",
+    "en": "isolated CI-account Docker config"
   }
 }

@@ -121,7 +121,8 @@ MANAGED_VARS = ("PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME", "DEVELO
 DOCKER_OVERRIDES = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH")
 
 
-def environment(cfg: dict, home: Path, sdk: Path | None = None) -> dict:
+def environment(cfg: dict, home: Path, sdk: Path | None = None, *,
+                applications: Path = Path("/Applications")) -> dict:
     cfg = configuration.normalized(cfg)
     caps, versions = cfg["capabilities"], cfg["versions"]
     env = {key: value for key, value in os.environ.items()
@@ -157,11 +158,45 @@ def environment(cfg: dict, home: Path, sdk: Path | None = None) -> dict:
             if resolved.parent.name == "bin" and (candidate / "release").is_file():
                 env["JAVA_HOME"] = str(candidate)
     if "ios" in caps:
-        xcode = Path(f'/Applications/Xcode_{versions["xcode"]}.app/Contents/Developer')
-        env["DEVELOPER_DIR"] = str(xcode if xcode.is_dir() else Path("/Applications/Xcode.app/Contents/Developer"))
+        selection = workloads.xcode_selection(versions["xcode"], applications=applications)
+        env["DEVELOPER_DIR"] = str(selection.developer_dir)
     if "docker" in caps:
         env["DOCKER_CONFIG"] = str(home / ".docker")
     return env
+
+
+def environment_report(cfg: dict, home: Path, sdk: Path | None = None, *,
+                       applications: Path = Path("/Applications")) -> dict:
+    """Describe only values owned by the wrapper; inherited variables stay private."""
+    normalized = configuration.normalized(cfg)
+    env = environment(normalized, home, sdk, applications=applications)
+    sources = {
+        "PATH": tr("env_source_path"),
+        "ANDROID_HOME": tr("env_source_android"),
+        "ANDROID_SDK_ROOT": tr("env_source_android"),
+        "JAVA_HOME": tr("env_source_java"),
+        "DEVELOPER_DIR": tr("env_source_xcode"),
+        "DOCKER_CONFIG": tr("env_source_docker"),
+    }
+    variables = []
+    for name in MANAGED_VARS:
+        item = {"name": name, "status": "set" if name in env else "unset",
+                "source": sources[name]}
+        if name in env:
+            item["value"] = env[name]
+        variables.append(item)
+    return {"schema": 1, "scope": "managed-runner-environment", "variables": variables}
+
+
+def render_environment_report(cfg: dict, home: Path, *, json_output=False) -> str:
+    report = environment_report(cfg, home)
+    if json_output:
+        return json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    lines = [tr("env_title")]
+    for item in report["variables"]:
+        value = item.get("value", tr("env_unset"))
+        lines.extend((f"{item['name']}={value}", f"  {tr('env_source')}: {item['source']}"))
+    return "\n".join(lines) + "\n"
 
 
 def shell_environment(cfg: dict, home: Path) -> str:
@@ -315,6 +350,16 @@ def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
                   verify="docker context show && docker info --format '{{.ServerVersion}}'",
                   docs="https://github.com/Poliklot/macos-actions-runner-kit/blob/main/docs/WORKLOADS.md#docker-and-acceptance-boundaries")
     if "ios" in caps:
+        selection = workloads.xcode_selection(versions["xcode"])
+        selection_causes = {
+            "ready": tr("xcode_selection_ready"),
+            "missing": tr("xcode_selection_missing"),
+            "ambiguous": tr("xcode_selection_ambiguous"),
+        }
+        check("xcode.selection", selection.ready, tr("xcode_selection_title"),
+              tr("xcode_selection_fix", versions["xcode"]), detected=selection.detected(),
+              cause=None if selection.ready else selection_causes[selection.status],
+              actor=tr("actor_admin"), verify="ci-runner doctor --explain xcode.selection")
         ok, version = output(["xcodebuild", "-version"], env)
         check("xcode.version", ok and version.splitlines()[0:1] == [f'Xcode {versions["xcode"]}'],
               f'Xcode {versions["xcode"]}',
@@ -584,6 +629,8 @@ def main(argv=None):
     c.add_argument("--java-version", help=tr('java_version_help'))
     sub.add_parser("profiles", help=tr('profiles_help'))
     sub.add_parser("shell-env", help=tr('shell_env_help'))
+    e = sub.add_parser("env", help=tr("env_help"))
+    e.add_argument("--json", action="store_true", dest="json_output", help=tr("env_json_help"))
     d = sub.add_parser("doctor", help=tr('doctor_help'))
     d.add_argument("--host", action="store_true", help=tr('host_help'))
     output_group = d.add_mutually_exclusive_group()
@@ -605,6 +652,9 @@ def main(argv=None):
         cfg = config(args.config)
         if args.command == "shell-env":
             print(shell_environment(cfg, Path.home()), end="")
+            return 0
+        if args.command == "env":
+            print(render_environment_report(cfg, Path.home(), json_output=args.json_output), end="")
             return 0
         if args.command == "doctor":
             return 0 if doctor(cfg, host=args.host, verbose=args.verbose,

@@ -104,6 +104,8 @@ ci-runner start
 > [!TIP]
 > Проверка: `ci-runner doctor`. Для подробностей: `ci-runner doctor --verbose`,
 > `ci-runner doctor --explain ИДЕНТИФИКАТОР`; для автоматизации: `ci-runner doctor --json`.
+> `ci-runner env` (или `ci-runner env --json`) показывает только управляемые wrapper-переменные
+> и их источник; унаследованные переменные и секреты в отчёт не попадают.
 > Английский: `ci-runner --lang en doctor`.
 > Обновление: останови runner и повтори setup из проверенных новых исходников.
 > [Подробности и устранение ошибок](tool/runner/OPERATIONS.md).
@@ -114,5 +116,7 @@ ci-runner start
 Для backend выбери `--profile backend` и подключи [пример Node workflow](examples/manual-node-ci.yml).
 Новая Android/mobile-конфигурация закрепляет `JAVA_HOME`; если Flutter всё равно выбирает
 JDK из Android Studio, workflow должен выполнить `flutter config --jdk-dir="$JAVA_HOME"`.
+iOS-интеграция выбирает ровно один установленный Xcode по версии внутри bundle и не
+переключается молча на другую глобальную версию из `xcode-select`.
 Старые mobile-конфиги и команды поддерживаются. Новые профили не включают автоматические
 PR-задания и не устанавливают Docker. Обновляй установленный комплект только после остановки всех jobs.

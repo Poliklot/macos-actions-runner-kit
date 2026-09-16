@@ -11,6 +11,8 @@
 - Added an explicit Java capability with major-version validation and managed `JAVA_HOME`;
   new Android/mobile profiles select Java 21 without rewriting existing configurations.
 - Added exact Homebrew remediation for common `gpg`, `actionlint` and `shellcheck` tools.
+- Added exact Xcode bundle selection with a fail-closed `DEVELOPER_DIR`, plus a safe
+  human/JSON report of wrapper-managed environment values and their sources.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 

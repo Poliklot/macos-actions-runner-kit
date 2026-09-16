@@ -25,6 +25,9 @@ ci-runner register
 ci-runner start
 ```
 
+Before registration, `ci-runner doctor --verbose` explains readiness failures and
+`ci-runner env` shows only the environment variables managed by this wrapper.
+
 Paste the token into the hidden prompt, never into a shell command. Run your prepared workflow
 with matching labels `[self-hosted, macOS, local-macos]`. Keep the Mac awake/on power;
 after all jobs finish, press Ctrl+C. The kit never dispatches a workflow itself.

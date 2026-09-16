@@ -59,7 +59,8 @@ No dependencies are copied/installed automatically except the explicitly selecte
 - `node`: Node.js + npm; optional `versions.node` major constraint.
 - `ruby`: Ruby; requires `versions.ruby`.
 - `android`: copied SDK/JDK/emulator readiness; does **not** implicitly require Ruby.
-- `ios`: Xcode and actual iOS device destination; requires `versions.xcode`; no implicit Ruby.
+- `ios`: one exact Xcode bundle version and an actual iOS device destination; requires
+  `versions.xcode`; no implicit Ruby and no fallback to the global `xcode-select` choice.
 
 These integrations have special environment/setup logic; they are not a list of allowed
 languages. Combine any of them with arbitrary tools, or select no integrations at all.
@@ -81,6 +82,13 @@ It does not contact the owner's daemon and is not a CI-account acceptance check.
 `doctor`. If CI-local tools are missing it may return incomplete **after installing the CLI**.
 Prepare those tools under CI, then rerun `ci-runner doctor`. Registration/start remain blocked
 until readiness passes. Doctor, runner and generated login-shell settings share one PATH renderer.
+`ci-runner env` reports the wrapper-owned PATH/SDK/JDK/Xcode/Docker variables and their sources;
+`--json` provides schema 1. It never dumps the inherited process environment.
+
+For iOS, selection scans complete `Xcode*.app` bundles in `/Applications` and reads their
+declared version. Exactly one bundle must match. Missing and duplicate matches use a nonexistent
+`DEVELOPER_DIR`, so probes/jobs fail instead of silently compiling with a different global Xcode.
+Bundle renaming is supported; symlinked or incomplete bundles are not selected.
 
 Legacy configs (`platforms`, `ruby_version`, `xcode_version`) and `--platforms` still work.
 For compatibility, `configure` without any workload flags retains the old mobile default;

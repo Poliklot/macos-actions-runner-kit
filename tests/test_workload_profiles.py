@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
 import socket
 import subprocess
@@ -167,6 +168,12 @@ class ProfileCLITests(unittest.TestCase):
 
 
 class EnvironmentTests(unittest.TestCase):
+    def xcode(self, applications, name, version):
+        contents = applications / name / 'Contents'
+        (contents / 'Developer').mkdir(parents=True)
+        with (contents / 'version.plist').open('wb') as output:
+            plistlib.dump({'CFBundleShortVersionString': version}, output)
+
     def test_generic_does_not_inherit_mobile_or_docker_overrides(self):
         dirty = {'ANDROID_HOME': '/private/sdk', 'ANDROID_SDK_ROOT': '/private/sdk',
                  'DEVELOPER_DIR': '/private/xcode', 'DOCKER_CONFIG': '/private/docker',
@@ -223,6 +230,41 @@ class EnvironmentTests(unittest.TestCase):
                 env = kit.environment(cfg, home)
             self.assertEqual(env['JAVA_HOME'], str(jdk.resolve()))
             self.assertNotIn('Android Studio', env['PATH'])
+
+    def test_xcode_is_selected_by_exact_bundle_version_not_global_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            applications = Path(directory)
+            self.xcode(applications, 'Xcode.app', '26.6')
+            self.xcode(applications, 'Xcode_custom.app', '26.3')
+            selected = workloads.xcode_selection('26.3', applications=applications)
+            self.assertTrue(selected.ready)
+            self.assertEqual(selected.developer_dir,
+                             applications / 'Xcode_custom.app/Contents/Developer')
+            env = kit.environment(profile('ios'), Path('/Users/ci'), applications=applications)
+            self.assertEqual(env['DEVELOPER_DIR'], str(selected.developer_dir))
+
+    def test_xcode_selection_fails_closed_when_missing_or_ambiguous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            applications = Path(directory)
+            self.xcode(applications, 'Xcode.app', '26.6')
+            missing = workloads.xcode_selection('26.3', applications=applications)
+            self.assertEqual(missing.status, 'missing')
+            self.assertFalse(missing.developer_dir.exists())
+            self.xcode(applications, 'Xcode_26.3.app', '26.3')
+            self.xcode(applications, 'Xcode_copy.app', '26.3')
+            ambiguous = workloads.xcode_selection('26.3', applications=applications)
+            self.assertEqual(ambiguous.status, 'ambiguous')
+            self.assertFalse(ambiguous.developer_dir.exists())
+            self.assertEqual(len(ambiguous.matches), 2)
+
+    def test_environment_report_contains_only_allowlisted_managed_variables(self):
+        with patch.dict(os.environ, {'SECRET_FIXTURE': 'must-not-be-printed'}):
+            report = kit.environment_report(profile('backend'), Path('/Users/ci_backend'))
+        serialized = json.dumps(report)
+        self.assertNotIn('SECRET_FIXTURE', serialized)
+        self.assertNotIn('must-not-be-printed', serialized)
+        self.assertEqual([item['name'] for item in report['variables']], list(kit.MANAGED_VARS))
+        self.assertEqual(report['scope'], 'managed-runner-environment')
 
 
 class ProbeTests(unittest.TestCase):
