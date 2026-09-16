@@ -101,6 +101,26 @@ variables are cleared. Remote SSH/TCP contexts are rejected before contacting a 
 Do not share a personal daemon or relax socket permissions: Docker exposes containers,
 volumes and host-mounted files. Isolated runtime and per-job cleanup remain your responsibility.
 
+Run `ci-runner doctor --explain docker` under the CI account for the selected context,
+endpoint, failure class and exact next step. The probe distinguishes a missing CLI or context,
+remote SSH/TCP contexts, unsafe or foreign-user sockets, missing/invalid sockets, permissions
+and an unreachable daemon. It never contacts a rejected remote or foreign-user endpoint.
+
+If Homebrew already provides `docker` and `colima`, a dedicated CI account can create its
+own default runtime without sharing the administrator's Docker Desktop or OrbStack state:
+
+```bash
+sudo -iu ci_backend
+colima start --runtime docker
+docker context show
+docker info --format '{{.ServerVersion}}'
+ci-runner doctor --explain docker
+```
+
+Choose CPU, memory and disk deliberately for the project rather than copying example values.
+Colima lifecycle, upgrades, resource sizing and cleanup remain explicit operator decisions;
+`doctor` detects and explains but never installs or starts a virtual machine.
+
 Green doctor is not proof of project builds, PostgreSQL E2E, amd64 emulation, signing or
 store delivery. Test the exact workflow separately. A dedicated user is not a VM sandbox.
 Public/untrusted PR execution, Linux provisioning, shared multi-repository accounts,

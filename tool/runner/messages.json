@@ -221,6 +221,66 @@
     "ru": "Docker context не удалось безопасно проверить или локальный daemon не отвечает.",
     "en": "The Docker context could not be inspected safely or its local daemon is unreachable."
   },
+  "docker_status_ready": {
+    "ru": "Локальный Docker daemon отвечает.",
+    "en": "The local Docker daemon is reachable."
+  },
+  "docker_status_cli_missing": {
+    "ru": "Docker CLI отсутствует в PATH CI-пользователя.",
+    "en": "Docker CLI is missing from the CI user's PATH."
+  },
+  "docker_status_context_missing": {
+    "ru": "У CI-пользователя не выбран Docker context.",
+    "en": "The CI user has no selected Docker context."
+  },
+  "docker_status_context_invalid": {
+    "ru": "Выбранный Docker context повреждён или не содержит корректный endpoint.",
+    "en": "The selected Docker context is invalid or has no valid endpoint."
+  },
+  "docker_status_remote_context": {
+    "ru": "Выбран удалённый SSH/TCP Docker context; runner разрешает только локальный unix socket.",
+    "en": "A remote SSH/TCP Docker context is selected; only a local Unix socket is allowed."
+  },
+  "docker_status_endpoint_unsafe": {
+    "ru": "Docker context содержит небезопасный путь unix socket.",
+    "en": "The Docker context contains an unsafe Unix socket path."
+  },
+  "docker_status_foreign_user_socket": {
+    "ru": "Docker context указывает на socket другого macOS-пользователя.",
+    "en": "The Docker context points to another macOS user's socket."
+  },
+  "docker_status_socket_missing": {
+    "ru": "Указанный Docker socket не существует или недоступен для проверки.",
+    "en": "The configured Docker socket does not exist or cannot be inspected."
+  },
+  "docker_status_endpoint_not_socket": {
+    "ru": "Docker endpoint существует, но не является unix socket.",
+    "en": "The Docker endpoint exists but is not a Unix socket."
+  },
+  "docker_status_socket_permission": {
+    "ru": "CI-пользователь не имеет доступа на чтение и запись к Docker socket.",
+    "en": "The CI user cannot read and write the Docker socket."
+  },
+  "docker_status_daemon_unreachable": {
+    "ru": "Локальный socket существует, но Docker daemon не отвечает.",
+    "en": "The local socket exists, but the Docker daemon is unreachable."
+  },
+  "docker_fix_cli": {
+    "ru": "Под администратором установи только CLI: brew install docker. Затем вернись под CI-пользователя и повтори doctor.",
+    "en": "As the administrator, install the CLI only: brew install docker. Return to the CI user and rerun doctor."
+  },
+  "docker_fix_colima": {
+    "ru": "Под CI-пользователем создай или запусти его отдельный runtime: colima start --runtime docker. Затем выполни docker info и ci-runner doctor.",
+    "en": "As the CI user, create or start its isolated runtime: colima start --runtime docker. Then run docker info and ci-runner doctor."
+  },
+  "docker_fix_provider": {
+    "ru": "Под CI-пользователем настрой отдельный локальный Docker provider и unix-socket context; затем выполни docker info и ci-runner doctor.",
+    "en": "Configure an isolated local Docker provider and Unix-socket context under the CI user; then run docker info and ci-runner doctor."
+  },
+  "docker_fix_isolation": {
+    "ru": "Не открывай socket личного аккаунта и не ослабляй его права; создай отдельный runtime CI-пользователя.",
+    "en": "Do not expose a personal account's socket or broaden its permissions; create an isolated CI-user runtime."
+  },
   "host_help": {
     "ru": "Проверка инструментов до создания CI-пользователя",
     "en": "Check tools before creating the CI user"

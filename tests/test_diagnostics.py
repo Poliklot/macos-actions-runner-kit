@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool/runner"))
 from diagnostics import CheckResult, Report
 import configuration
+import i18n
 import runner
+import workloads
 
 
 class ReportTests(unittest.TestCase):
@@ -91,6 +93,36 @@ class DoctorOutputTests(unittest.TestCase):
         self.assertIn("[host.macos]", stream.getvalue())
         self.assertIn("Darwin", stream.getvalue())
         self.assertIn("[tool.python3]", stream.getvalue())
+
+    def test_docker_failure_explains_detected_context_and_colima_action(self):
+        previous = i18n.LANGUAGE
+        self.addCleanup(setattr, i18n, "LANGUAGE", previous)
+        i18n.LANGUAGE = "ru"
+        cfg = configuration.for_profile(runner.config(runner.ROOT / "config.example.json"),
+                                        "backend", node="24")
+        docker = workloads.DockerProbe(
+            "socket-missing", cli="/opt/homebrew/bin/docker", context="colima",
+            host="unix:///Users/ci_backend/.colima/default/docker.sock",
+            socket="/Users/ci_backend/.colima/default/docker.sock", providers=("colima",),
+        )
+        stream = io.StringIO()
+        patches = self.patches()
+        def output(args, _env):
+            if args == ["node", "--version"]:
+                return True, "v24.1.0"
+            if args == ["npm", "--version"]:
+                return True, "11.0.0"
+            self.fail("Unexpected command: " + repr(args))
+        with patches[0], patches[1], patches[2], patches[3], patches[4], \
+                patch.object(runner, "output", side_effect=output), \
+                patch.object(workloads, "docker_probe", return_value=docker), \
+                redirect_stdout(stream):
+            self.assertFalse(runner.doctor(cfg, explain="docker"))
+        value = stream.getvalue()
+        self.assertIn("context: colima", value)
+        self.assertIn("socket", value)
+        self.assertIn("colima start --runtime docker", value)
+        self.assertIn("CI-пользователь", value)
 
 
 if __name__ == "__main__":

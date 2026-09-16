@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -198,9 +199,20 @@ class ProbeTests(unittest.TestCase):
             output.assert_called_once_with(['node', '--version'], {})
 
     def test_local_docker_is_probed_without_starting_containers(self):
-        output = Mock(side_effect=[(True, '{"Host":"unix:///Users/ci/.docker/run/docker.sock"}'), (True, '29.4.0')])
-        self.assertTrue(workloads.docker_ready(output, {}))
-        self.assertEqual(output.call_args.args[0], ['docker', '--host', 'unix:///Users/ci/.docker/run/docker.sock',
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'docker.sock'
+            server = socket.socket(socket.AF_UNIX)
+            self.addCleanup(server.close)
+            server.bind(str(path))
+            host = 'unix://' + str(path)
+            output = Mock(side_effect=[(True, 'ci-local'), (True, json.dumps({'Host': host})),
+                                       (True, '29.4.0')])
+            probe = workloads.docker_probe(output, {}, home=Path('/Users/ci'),
+                                           which=lambda name, **_: '/fixture/' + name)
+        self.assertTrue(probe.ready)
+        self.assertEqual(probe.context, 'ci-local')
+        self.assertEqual(probe.server_version, '29.4.0')
+        self.assertEqual(output.call_args.args[0], ['docker', '--host', host,
                                                    'info', '--format', '{{.ServerVersion}}'])
 
     def test_remote_malformed_or_unsafe_context_never_contacts_daemon(self):
@@ -208,14 +220,35 @@ class ProbeTests(unittest.TestCase):
                         '{"Host":"unix:///tmp/../private/docker.sock"}', '{"Host":null}',
                         '{}', '[]', 'null', 'not json', '{"Host":"unix://relative"}'):
             with self.subTest(context=context):
-                output = Mock(return_value=(True, context))
-                self.assertFalse(workloads.docker_ready(output, {}))
-                self.assertEqual(output.call_count, 1)
+                output = Mock(side_effect=[(True, 'unsafe'), (True, context)])
+                probe = workloads.docker_probe(output, {}, home=Path('/Users/ci'),
+                                               which=lambda name, **_: '/fixture/' + name)
+                self.assertFalse(probe.ready)
+                self.assertEqual(output.call_count, 2)
 
     def test_missing_cli_or_offline_daemon_fails(self):
-        self.assertFalse(workloads.docker_ready(Mock(return_value=(False, '')), {}))
-        output = Mock(side_effect=[(True, '{"Host":"unix:///tmp/docker.sock"}'), (False, '')])
-        self.assertFalse(workloads.docker_ready(output, {}))
+        missing = workloads.docker_probe(Mock(), {}, home=Path('/Users/ci'),
+                                         which=lambda *_args, **_kwargs: None)
+        self.assertEqual(missing.status, 'cli-missing')
+        no_context = workloads.docker_probe(Mock(return_value=(False, '')), {},
+                                            home=Path('/Users/ci'),
+                                            which=lambda name, **_: '/fixture/' + name)
+        self.assertEqual(no_context.status, 'context-missing')
+
+    def test_missing_socket_reports_provider_and_foreign_user_socket_is_rejected(self):
+        def which(name, **_):
+            return '/opt/homebrew/bin/' + name if name in ('docker', 'colima') else None
+        output = Mock(side_effect=[(True, 'colima'),
+                                   (True, '{"Host":"unix:///Users/ci/.colima/default/docker.sock"}')])
+        probe = workloads.docker_probe(output, {}, home=Path('/Users/ci'), which=which)
+        self.assertEqual(probe.status, 'socket-missing')
+        self.assertEqual(probe.providers, ('colima',))
+
+        foreign = Mock(side_effect=[(True, 'personal'),
+                                    (True, '{"Host":"unix:///Users/owner/.orbstack/run/docker.sock"}')])
+        probe = workloads.docker_probe(foreign, {}, home=Path('/Users/ci'), which=which)
+        self.assertEqual(probe.status, 'foreign-user-socket')
+        self.assertEqual(foreign.call_count, 2)
 
     def test_command_probes_are_bounded(self):
         with patch.object(kit, 'run', side_effect=subprocess.TimeoutExpired('docker', 15)) as run:
@@ -259,12 +292,12 @@ class DoctorTests(unittest.TestCase):
                 return True, 'v24.1.0'
             if args == ['npm', '--version']:
                 return True, '11.0.0'
-            if args[:3] == ['docker', 'context', 'inspect']:
-                return True, '{"Host":"unix:///fixture/docker.sock"}'
-            if args[:3] == ['docker', '--host', 'unix:///fixture/docker.sock']:
-                return True, '29.4.0'
             self.fail('Unexpected command: ' + repr(args))
-        with patch.object(kit, 'output', side_effect=output):
+        docker = workloads.DockerProbe('ready', cli='/fixture/docker', context='ci-local',
+                                       host='unix:///fixture/docker.sock',
+                                       socket='/fixture/docker.sock', server_version='29.4.0')
+        with patch.object(kit, 'output', side_effect=output), \
+                patch.object(workloads, 'docker_probe', return_value=docker):
             self.assertTrue(kit.doctor(profile('backend', node='24'), print_report=False))
 
     def test_host_preflight_does_not_contact_owner_docker_daemon(self):

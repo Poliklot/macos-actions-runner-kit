@@ -18,7 +18,8 @@ workflow code, including in private repositories. [Official security guidance](h
 - Keeps registration tokens out of command arguments and kit files; no echoed-input fallback.
 - Installs root-owned wrapper code and uses a separate account; copies an SDK only when selected.
 - Validates declarative capabilities/version constraints; config cannot run install hooks or shell probes.
-- Bounds command probes and refuses remote Docker contexts before contacting a daemon.
+- Bounds command probes and refuses remote, unsafe and foreign-user Docker contexts before
+  contacting a daemon; symlinked socket paths are resolved before the ownership decision.
 - Offers offline regression tests; privileged setup is not exercised by ordinary tests.
 
 ## What it does not do
@@ -52,7 +53,8 @@ Docker is not installed or shared by this kit. A daemon may expose its container
 and host mounts to anyone with socket access. Do not grant the CI account access to the
 owner's personal daemon, make sockets world-writable, or treat a local Unix endpoint as
 proof of isolation. Provision and validate an independent runtime explicitly. `doctor` only
-performs read-only context/server checks; cleanup and architecture belong to the workflow.
+performs read-only context/server checks, reports the selected endpoint and never starts a
+provider; cleanup and architecture belong to the workflow.
 
 ## Reporting
 

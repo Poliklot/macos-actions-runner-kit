@@ -110,6 +110,10 @@ is normalized into a private v2 installation snapshot; the source file and match
 are preserved. A running runner is never hot-reconfigured. Setup does not install language tools
 or start/share a Docker runtime; the CI user must pass its own Docker check. Non-local contexts
 and inherited endpoint overrides are rejected/cleared. See [workloads](../../docs/WORKLOADS.md).
+Use `ci-runner doctor --explain docker` under that CI account: it reports the selected
+context/endpoint, refuses another user's socket and provides a Colima-specific next step when
+`colima` is available. Do not solve a permission failure with `chmod`, a shared group or a
+symlink into the administrator's Docker Desktop/OrbStack home.
 
 Prefer a reviewed portable `--requirements` file for project-specific tools, version probes
 and CI-local PATH directories. Presets are only shorthand. Custom tools/paths are checked in

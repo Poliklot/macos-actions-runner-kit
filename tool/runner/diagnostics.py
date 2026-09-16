@@ -64,16 +64,16 @@ class Report:
             show_details = verbose or explain is not None or not check.ok
             if show_details:
                 fields = (
-                    ("diagnostic_detected", check.detected),
-                    ("diagnostic_cause", check.cause if not check.ok else None),
-                    ("diagnostic_fix", check.remediation if not check.ok else None),
-                    ("diagnostic_actor", check.actor if not check.ok else None),
-                    ("diagnostic_verify", check.verify if not check.ok else None),
-                    ("diagnostic_docs", check.docs if not check.ok else None),
+                    (tr("diagnostic_detected"), check.detected),
+                    (tr("diagnostic_cause"), check.cause if not check.ok else None),
+                    (tr("diagnostic_fix"), check.remediation if not check.ok else None),
+                    (tr("diagnostic_actor"), check.actor if not check.ok else None),
+                    (tr("diagnostic_verify"), check.verify if not check.ok else None),
+                    (tr("diagnostic_docs"), check.docs if not check.ok else None),
                 )
                 for label, value in fields:
                     if value:
-                        lines.append(f"       {tr(label)}: {value}")
+                        lines.append(f"       {label}: {value}")
         if docker_host_note and explain is None:
             lines.append(tr("docker_ci_only"))
         if explain is None:

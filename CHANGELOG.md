@@ -6,6 +6,8 @@
 - Added verbose, focused explanation and schema-versioned JSON doctor output without
   exposing inherited environment values or credentials.
 - Attached detected values, responsible account and verification commands to failed checks.
+- Added fail-closed Docker failure classification, foreign-user socket detection and
+  Colima-specific remediation without installing or starting a runtime automatically.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 

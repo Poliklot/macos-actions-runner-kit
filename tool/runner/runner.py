@@ -160,6 +160,33 @@ def require_ci(cfg: dict):
         raise ValueError(tr('ci_login', cfg["ci_user"], cfg["ci_user"]))
 
 
+def docker_guidance(probe: workloads.DockerProbe) -> tuple[str, str]:
+    """Return a localized cause and the safest relevant next action."""
+    causes = {
+        "ready": tr("docker_status_ready"),
+        "cli-missing": tr("docker_status_cli_missing"),
+        "context-missing": tr("docker_status_context_missing"),
+        "context-invalid": tr("docker_status_context_invalid"),
+        "remote-context": tr("docker_status_remote_context"),
+        "endpoint-unsafe": tr("docker_status_endpoint_unsafe"),
+        "foreign-user-socket": tr("docker_status_foreign_user_socket"),
+        "socket-missing": tr("docker_status_socket_missing"),
+        "endpoint-not-socket": tr("docker_status_endpoint_not_socket"),
+        "socket-permission": tr("docker_status_socket_permission"),
+        "daemon-unreachable": tr("docker_status_daemon_unreachable"),
+    }
+    cause = causes[probe.status]
+    if "colima" in probe.providers:
+        fix = tr("docker_fix_colima")
+    elif probe.status == "cli-missing":
+        fix = tr("docker_fix_cli")
+    else:
+        fix = tr("docker_fix_provider")
+    if probe.status in ("remote-context", "foreign-user-socket", "endpoint-unsafe"):
+        fix = tr("docker_fix_isolation") + " " + fix
+    return cause, fix
+
+
 def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
     cfg = configuration.normalized(cfg)
     caps, versions = cfg["capabilities"], cfg["versions"]
@@ -228,14 +255,17 @@ def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
         if host:
             # Setup must not depend on (or contact) the owner's personal daemon.
             docker_cli = shutil.which("docker", path=env["PATH"])
-            check("docker.cli", docker_cli, "Docker CLI", tr('docker_fix'),
+            check("docker.cli", docker_cli, "Docker CLI", tr('docker_fix_cli'),
                   detected=docker_cli or tr("missing"), actor=tr("actor_admin"),
                   verify="command -v docker")
         else:
-            docker_ok = workloads.docker_ready(output, env)
-            check("docker.daemon", docker_ok, tr('docker_daemon'), tr('docker_fix'),
-                  detected=env["DOCKER_CONFIG"], cause=None if docker_ok else tr("docker_cause_generic"),
-                  actor=tr("actor_ci"), verify="docker info")
+            docker = workloads.docker_probe(output, env, home=home)
+            cause, fix = docker_guidance(docker)
+            check("docker.daemon", docker.ready, tr('docker_daemon'), fix,
+                  detected=docker.detected(), cause=None if docker.ready else cause,
+                  actor=tr("actor_ci"),
+                  verify="docker context show && docker info --format '{{.ServerVersion}}'",
+                  docs="https://github.com/Poliklot/macos-actions-runner-kit/blob/main/docs/WORKLOADS.md#docker-and-acceptance-boundaries")
     if "ios" in caps:
         ok, version = output(["xcodebuild", "-version"], env)
         check("xcode.version", ok and version.splitlines()[0:1] == [f'Xcode {versions["xcode"]}'],

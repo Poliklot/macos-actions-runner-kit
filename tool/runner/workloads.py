@@ -1,9 +1,13 @@
 """Read-only Node/Docker probes; project build commands belong in workflows."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
+import stat
 
 
 def node_ready(output, env, major=None):
@@ -12,24 +16,116 @@ def node_ready(output, env, major=None):
     return bool(ok and match and (major is None or match[1] == major))
 
 
-def docker_ready(output, env):
+@dataclass(frozen=True)
+class DockerProbe:
+    status: str
+    cli: str | None = None
+    context: str | None = None
+    host: str | None = None
+    socket: str | None = None
+    server_version: str | None = None
+    providers: tuple[str, ...] = ()
+
+    @property
+    def ready(self) -> bool:
+        return self.status == "ready"
+
+    def detected(self) -> str:
+        values = []
+        for label, value in (("CLI", self.cli), ("context", self.context),
+                             ("endpoint", self.host), ("server", self.server_version)):
+            if value:
+                values.append(f"{label}: {value}")
+        if self.providers:
+            values.append("providers: " + ", ".join(self.providers))
+        return "; ".join(values) or "Docker was not detected"
+
+
+def docker_probe(output, env, *, home: Path, which=shutil.which, uid=None) -> DockerProbe:
+    """Diagnose a CI-owned local Docker endpoint without contacting remote daemons."""
+    path = env.get("PATH")
+    cli = which("docker", path=path)
+    providers = tuple(name for name in ("colima", "orbctl") if which(name, path=path))
+    if not cli:
+        return DockerProbe("cli-missing", providers=providers)
+
+    ok, context = output(["docker", "context", "show"], env)
+    context = context.strip() if ok else ""
+    if not context:
+        return DockerProbe("context-missing", cli=cli, providers=providers)
+
     # The wrapper supplies the CI account's own Docker config and strips inherited
     # endpoint overrides. Inspect first: never probe a production SSH/TCP daemon.
-    ok, context = output(["docker", "context", "inspect", "--format", "{{json .Endpoints.docker}}"], env)
+    ok, endpoint_json = output(["docker", "context", "inspect", context,
+                                "--format", "{{json .Endpoints.docker}}"], env)
     if not ok:
-        return False
+        return DockerProbe("context-invalid", cli=cli, context=context, providers=providers)
     try:
-        endpoint = json.loads(context)
+        endpoint = json.loads(endpoint_json)
         host = endpoint.get("Host") if isinstance(endpoint, dict) else None
     except (ValueError, TypeError):
-        return False
-    if not isinstance(host, str) or not host.startswith("unix:///") or any(c.isspace() for c in host):
-        return False
-    path = host[len("unix://"):]
-    if ".." in PurePosixPath(path).parts:
-        return False
+        return DockerProbe("context-invalid", cli=cli, context=context, providers=providers)
+    if not isinstance(host, str):
+        return DockerProbe("context-invalid", cli=cli, context=context, providers=providers)
+    if not host.startswith("unix:///"):
+        return DockerProbe("remote-context", cli=cli, context=context, host=host,
+                           providers=providers)
+    if any(c.isspace() for c in host):
+        return DockerProbe("endpoint-unsafe", cli=cli, context=context, host=host,
+                           providers=providers)
+    socket_value = host[len("unix://"):]
+    socket_path = Path(socket_value)
+    if ".." in PurePosixPath(socket_value).parts:
+        return DockerProbe("endpoint-unsafe", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    # A context pointing into another macOS user's home defeats account isolation.
+    try:
+        socket_path.relative_to(Path("/Users"))
+        lexical_in_users = True
+    except ValueError:
+        lexical_in_users = False
+    if lexical_in_users and not socket_path.is_relative_to(home):
+        return DockerProbe("foreign-user-socket", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    try:
+        resolved_socket = socket_path.resolve(strict=True)
+    except (FileNotFoundError, PermissionError, OSError):
+        return DockerProbe("socket-missing", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    try:
+        resolved_socket.relative_to(Path("/Users"))
+        resolved_in_users = True
+    except ValueError:
+        resolved_in_users = False
+    if resolved_in_users and not resolved_socket.is_relative_to(home.resolve()):
+        return DockerProbe("foreign-user-socket", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    try:
+        info = socket_path.stat()
+    except (FileNotFoundError, PermissionError, OSError):  # Race after resolve.
+        return DockerProbe("socket-missing", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    if not stat.S_ISSOCK(info.st_mode):
+        return DockerProbe("endpoint-not-socket", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    uid = os.getuid() if uid is None else uid
+    if resolved_in_users and info.st_uid != uid:
+        return DockerProbe("foreign-user-socket", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    if not os.access(socket_path, os.R_OK | os.W_OK):
+        return DockerProbe("socket-permission", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
     ok, version = output(["docker", "--host", host, "info", "--format", "{{.ServerVersion}}"], env)
-    return bool(ok and version)
+    if not ok or not version:
+        return DockerProbe("daemon-unreachable", cli=cli, context=context, host=host,
+                           socket=socket_value, providers=providers)
+    return DockerProbe("ready", cli=cli, context=context, host=host, socket=socket_value,
+                       server_version=version, providers=providers)
+
+
+def docker_ready(output, env, *, home: Path | None = None, which=shutil.which, uid=None):
+    """Compatibility boolean for callers that do not need structured diagnostics."""
+    return docker_probe(output, env, home=home or Path.home(), which=which, uid=uid).ready
 
 
 def tool_ready(output, env, tool, version):
