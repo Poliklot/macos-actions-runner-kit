@@ -58,7 +58,8 @@ def configure(args):
         raise ValueError(tr('config_placeholder'))
     value = config(ROOT / 'config.example.json')
     value.update(repository=args.repository, label=args.label, ci_user=args.ci_user)
-    custom = args.profile is not None or args.capability or args.require_tool or args.node_version is not None
+    custom = (args.profile is not None or args.capability or args.require_tool
+              or args.java_version is not None or args.node_version is not None)
     if args.requirements is not None:
         if custom or args.platforms is not None or args.ruby_version is not None or args.xcode_version is not None:
             raise ValueError(tr('requirements_conflict'))
@@ -67,9 +68,11 @@ def configure(args):
         if args.platforms is not None:
             raise ValueError(tr('profile_platform_conflict'))
         value = configuration.for_profile(value, args.profile or 'generic', extra=args.capability,
-                                          tools=args.require_tool, node=args.node_version,
+                                          tools=args.require_tool, java=args.java_version or "21",
+                                          node=args.node_version,
                                           ruby=args.ruby_version or "3.3", xcode=args.xcode_version or "26.3")
-        if ((args.ruby_version is not None and "ruby" not in value["capabilities"])
+        if ((args.java_version is not None and "java" not in value["capabilities"])
+                or (args.ruby_version is not None and "ruby" not in value["capabilities"])
                 or (args.xcode_version is not None and "ios" not in value["capabilities"])):
             raise ValueError(tr("versions_invalid"))
     else:
@@ -102,8 +105,19 @@ def output(args, env=None):
         return False, ""
 
 
+def output_all(args, env=None):
+    """Bounded probe for tools such as Java that report versions on stderr."""
+    try:
+        result = run(args, env=env, timeout=15)
+        text = "\n".join(value.strip() for value in (result.stdout or "", result.stderr or "")
+                         if value and value.strip())
+        return result.returncode == 0, text
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+
+
 # Only these fixed variables may be exported by shell-env. Never print inherited secrets.
-MANAGED_VARS = ("PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT", "DEVELOPER_DIR", "DOCKER_CONFIG")
+MANAGED_VARS = ("PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME", "DEVELOPER_DIR", "DOCKER_CONFIG")
 DOCKER_OVERRIDES = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH")
 
 
@@ -125,12 +139,23 @@ def environment(cfg: dict, home: Path, sdk: Path | None = None) -> dict:
         version = versions["node"]
         search.extend([Path(f"/opt/homebrew/opt/node@{version}/bin"),
                        Path(f"/usr/local/opt/node@{version}/bin")])
+    if "java" in caps:
+        version = versions["java"]
+        search.extend([Path(f"/opt/homebrew/opt/openjdk@{version}/bin"),
+                       Path(f"/usr/local/opt/openjdk@{version}/bin")])
     search.extend([Path("/opt/homebrew/bin"), Path("/opt/homebrew/sbin")])
     if "android" in caps:
         sdk = sdk or home / "Library/Android/sdk"
         env.update(ANDROID_HOME=str(sdk), ANDROID_SDK_ROOT=str(sdk))
         search.extend([sdk / "platform-tools", sdk / "emulator", sdk / "cmdline-tools/latest/bin"])
     env["PATH"] = ":".join(map(str, search)) + ":/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    if "java" in caps:
+        java = shutil.which("java", path=env["PATH"])
+        if java:
+            resolved = Path(java).resolve()
+            candidate = resolved.parent.parent
+            if resolved.parent.name == "bin" and (candidate / "release").is_file():
+                env["JAVA_HOME"] = str(candidate)
     if "ios" in caps:
         xcode = Path(f'/Applications/Xcode_{versions["xcode"]}.app/Contents/Developer')
         env["DEVELOPER_DIR"] = str(xcode if xcode.is_dir() else Path("/Applications/Xcode.app/Contents/Developer"))
@@ -187,6 +212,15 @@ def docker_guidance(probe: workloads.DockerProbe) -> tuple[str, str]:
     return cause, fix
 
 
+def tool_install_guidance(tool: str) -> str:
+    known = {
+        "actionlint": tr("tool_install_actionlint"),
+        "gpg": tr("tool_install_gpg"),
+        "shellcheck": tr("tool_install_shellcheck"),
+    }
+    return known.get(tool, tr("tools_install"))
+
+
 def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
     cfg = configuration.normalized(cfg)
     caps, versions = cfg["capabilities"], cfg["versions"]
@@ -225,7 +259,7 @@ def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
     for tool in dict.fromkeys(["python3", "git", "curl", "jq", "gh",
                                *(cfg["required_tools"] if not host else [])]):
         location = shutil.which(tool, path=env["PATH"])
-        check(f"tool.{tool}", location, tr('command', tool), tr('tools_install'),
+        check(f"tool.{tool}", location, tr('command', tool), tool_install_guidance(tool),
               detected=location or tr("missing"), actor=tr("actor_admin"),
               verify=f"command -v {tool}")
     if not host:
@@ -251,6 +285,20 @@ def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
         check("runtime.npm", npm_ok, "npm", tr('node_fix'),
               detected=npm_version or tr("missing"), actor=tr("actor_admin"),
               verify="npm --version")
+    if "java" in caps:
+        java_home = env.get("JAVA_HOME")
+        java_bin = Path(java_home) / "bin/java" if java_home else None
+        java_ok, java_text = output_all([str(java_bin), "-version"], env) if java_bin else (False, "")
+        detected_major = workloads.java_version(java_text)
+        required_major = versions["java"]
+        ready = bool(java_ok and detected_major == required_major)
+        check("runtime.java", ready, f"Java {required_major}",
+              tr("java_fix", required_major, required_major),
+              detected=(f"JAVA_HOME={java_home}; {java_text.splitlines()[0]}" if java_home and java_text
+                        else tr("java_home_missing")),
+              cause=None if ready else tr("java_cause", required_major),
+              actor=tr("actor_admin"),
+              verify='echo "$JAVA_HOME" && "$JAVA_HOME/bin/java" -version')
     if "docker" in caps:
         if host:
             # Setup must not depend on (or contact) the owner's personal daemon.
@@ -533,6 +581,7 @@ def main(argv=None):
     c.add_argument("--capability", choices=configuration.CAPABILITIES, action="append", default=[], help=tr('capability_help'))
     c.add_argument("--require-tool", action="append", default=[], help=tr('required_tool_help'))
     c.add_argument("--node-version", help=tr('node_version_help'))
+    c.add_argument("--java-version", help=tr('java_version_help'))
     sub.add_parser("profiles", help=tr('profiles_help'))
     sub.add_parser("shell-env", help=tr('shell_env_help'))
     d = sub.add_parser("doctor", help=tr('doctor_help'))

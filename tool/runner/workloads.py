@@ -16,6 +16,16 @@ def node_ready(output, env, major=None):
     return bool(ok and match and (major is None or match[1] == major))
 
 
+def java_version(text: str) -> str | None:
+    """Extract a stable Java major from java -version stdout/stderr."""
+    first = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    match = re.search(r'\b(?:openjdk|java) version "([0-9]+)(?:\.[0-9._]+)?"', first)
+    if not match:
+        return None
+    # Java 8 and earlier report 1.8; modern pinned toolchains use their real major.
+    return match[1]
+
+
 @dataclass(frozen=True)
 class DockerProbe:
     status: str

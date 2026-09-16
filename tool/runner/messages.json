@@ -677,6 +677,34 @@
     "ru": "Требуемый major Node.js; только вместе с node capability",
     "en": "Required Node.js major; requires the node capability"
   },
+  "java_version_help": {
+    "ru": "Требуемая major-версия Java; только вместе с java capability",
+    "en": "Required Java major; requires the java capability"
+  },
+  "java_fix": {
+    "ru": "Под администратором установи JDK %s (например, brew install openjdk@%s), повтори setup и doctor. Android Studio JDK не выбирается неявно.",
+    "en": "As the administrator, install JDK %s (for example, brew install openjdk@%s), then rerun setup and doctor. Android Studio's JDK is not selected implicitly."
+  },
+  "java_cause": {
+    "ru": "Runner не смог однозначно выбрать полный JDK major %s и сформировать JAVA_HOME.",
+    "en": "The runner could not select a complete JDK major %s and derive JAVA_HOME unambiguously."
+  },
+  "java_home_missing": {
+    "ru": "JAVA_HOME не сформирован из проверенного JDK",
+    "en": "JAVA_HOME was not derived from a verified JDK"
+  },
+  "tool_install_gpg": {
+    "ru": "Под администратором: brew install gnupg. Затем под CI-пользователем: command -v gpg; ci-runner doctor.",
+    "en": "As the administrator: brew install gnupg. Then as the CI user: command -v gpg; ci-runner doctor."
+  },
+  "tool_install_actionlint": {
+    "ru": "Под администратором: brew install actionlint. Затем под CI-пользователем: actionlint -version; ci-runner doctor.",
+    "en": "As the administrator: brew install actionlint. Then as the CI user: actionlint -version; ci-runner doctor."
+  },
+  "tool_install_shellcheck": {
+    "ru": "Под администратором: brew install shellcheck. Затем под CI-пользователем: shellcheck --version; ci-runner doctor.",
+    "en": "As the administrator: brew install shellcheck. Then as the CI user: shellcheck --version; ci-runner doctor."
+  },
   "profiles_help": {
     "ru": "Показать профили без конфигурации и изменений компьютера",
     "en": "List profiles without configuration or machine changes"

@@ -42,7 +42,7 @@ case "$ci_user" in root|admin|daemon|nobody|guest) fail provision_user_required 
 [[ -z "$xcode" || "$xcode" =~ ^[0-9]+\.[0-9]+$ ]] || fail provision_versions
 [[ -z "$ruby" || "$ruby" =~ ^[0-9]+\.[0-9]+$ ]] || fail provision_versions
 [[ "$minimum_free_gib" =~ ^[0-9]+$ && "$minimum_free_gib" -ge 20 && "$minimum_free_gib" -le 1000 ]] || fail provision_disk
-capability_pattern='^\[("(android|docker|ios|node|ruby)"(,"(android|docker|ios|node|ruby)")*)?\]$'
+capability_pattern='^\[("(android|docker|ios|java|node|ruby)"(,"(android|docker|ios|java|node|ruby)")*)?\]$'
 [[ "$capabilities" =~ $capability_pattern ]] || fail capabilities_invalid
 [[ "$capabilities" != *ios* || -n "$xcode" ]] || fail provision_versions
 [[ "$capabilities" != *ruby* || -n "$ruby" ]] || fail provision_versions

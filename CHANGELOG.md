@@ -8,6 +8,9 @@
 - Attached detected values, responsible account and verification commands to failed checks.
 - Added fail-closed Docker failure classification, foreign-user socket detection and
   Colima-specific remediation without installing or starting a runtime automatically.
+- Added an explicit Java capability with major-version validation and managed `JAVA_HOME`;
+  new Android/mobile profiles select Java 21 without rewriting existing configurations.
+- Added exact Homebrew remediation for common `gpg`, `actionlint` and `shellcheck` tools.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 

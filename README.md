@@ -64,7 +64,7 @@ The installer prepares the account and `ci-runner`; it copies an Android SDK onl
 
 > [!NOTE]
 > Start with a developer Mac: Python 3.12+, `git`, `curl`, `jq`, `gh`;
-> Ruby 3.3 for mobile profiles; Xcode 26.3 for iOS; full Android SDK and JDK for Android.
+> Ruby 3.3 for mobile profiles; Xcode 26.3 for iOS; full Android SDK and JDK 21 for new Android/mobile profiles.
 > Keep **20 GiB free**, plus space for an SDK copy when Android is selected. The installer reports missing tools;
 > it does not install Xcode, accept Apple licences or make your account an administrator.
 > For iOS, also install **Platform Support** in Xcode → Settings → Components.
@@ -111,5 +111,7 @@ This kit prepares a runner, **not a universal signed Flutter release pipeline**.
 Project build commands, signing, credential cleanup and delivery remain the workflow owner's responsibility.
 
 For backend, select `--profile backend` and follow the [Node workflow example](examples/manual-node-ci.yml).
+New Android/mobile configurations pin `JAVA_HOME`; if Flutter still prefers Android Studio's
+JDK, the project workflow must run `flutter config --jdk-dir="$JAVA_HOME"`.
 Legacy mobile configs/commands remain supported. New profiles do not enable automatic PR jobs
 or install a Docker daemon. Update an installed kit only after all jobs have stopped.

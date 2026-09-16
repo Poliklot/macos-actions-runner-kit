@@ -64,7 +64,7 @@ bash runner setup --lang ru
 
 > [!NOTE]
 > Нужен разработческий Mac: Python 3.12+, `git`, `curl`, `jq`, `gh`; Ruby 3.3 для mobile-профилей;
-> Xcode 26.3 для iOS; полный Android SDK и JDK для Android.
+> Xcode 26.3 для iOS; полный Android SDK и JDK 21 для новых Android/mobile-профилей.
 > Нужно **20 GiB свободно** и место под копию SDK, если выбран Android. Недостающие компоненты покажет установщик.
 > Xcode, принятие лицензии Apple и установку недостающих инструментов выполняет владелец Mac.
 > Для iOS установи также **Platform Support** в Xcode → Settings → Components.
@@ -112,5 +112,7 @@ ci-runner start
 Команды проекта, секреты и их очистка остаются ответственностью владельца workflow.
 
 Для backend выбери `--profile backend` и подключи [пример Node workflow](examples/manual-node-ci.yml).
+Новая Android/mobile-конфигурация закрепляет `JAVA_HOME`; если Flutter всё равно выбирает
+JDK из Android Studio, workflow должен выполнить `flutter config --jdk-dir="$JAVA_HOME"`.
 Старые mobile-конфиги и команды поддерживаются. Новые профили не включают автоматические
 PR-задания и не устанавливают Docker. Обновляй установленный комплект только после остановки всех jobs.

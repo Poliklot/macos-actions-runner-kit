@@ -94,6 +94,15 @@ class DoctorOutputTests(unittest.TestCase):
         self.assertIn("Darwin", stream.getvalue())
         self.assertIn("[tool.python3]", stream.getvalue())
 
+    def test_known_tool_remediation_is_copy_pasteable(self):
+        previous = i18n.LANGUAGE
+        self.addCleanup(setattr, i18n, "LANGUAGE", previous)
+        i18n.LANGUAGE = "ru"
+        self.assertIn("brew install gnupg", runner.tool_install_guidance("gpg"))
+        self.assertIn("brew install actionlint", runner.tool_install_guidance("actionlint"))
+        self.assertIn("brew install shellcheck", runner.tool_install_guidance("shellcheck"))
+        self.assertNotIn("brew install gnupg", runner.tool_install_guidance("terraform"))
+
     def test_docker_failure_explains_detected_context_and_colima_action(self):
         previous = i18n.LANGUAGE
         self.addCleanup(setattr, i18n, "LANGUAGE", previous)

@@ -40,6 +40,14 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(value['versions'], {'node': '24'})
         self.assertNotIn('platforms', value)
 
+    def test_new_android_profiles_pin_java_without_rewriting_legacy_configs(self):
+        value = profile('android')
+        self.assertIn('java', value['capabilities'])
+        self.assertEqual(value['versions']['java'], '21')
+        legacy = config.normalized(kit.config(kit.ROOT / 'config.example.json'))
+        self.assertNotIn('java', legacy['capabilities'])
+        self.assertNotIn('java', legacy['versions'])
+
     def test_composable_capabilities_and_extra_commands(self):
         value = profile('node', extra=['docker', 'node'], tools=['terraform', 'go', 'python3.12'])
         self.assertEqual(value['capabilities'], ['docker', 'node'])
@@ -91,6 +99,15 @@ class SchemaTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 config.validate(dict(profile('node'), versions={'node': value}))
 
+    def test_java_requires_a_major_version_and_matching_capability(self):
+        value = profile('android', java='21')
+        self.assertEqual(value['versions']['java'], '21')
+        for version in ('21.0', 'v21', '0', '--help', None, 21, True):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                config.validate(dict(value, versions=dict(value['versions'], java=version)))
+        with self.assertRaises(ValueError):
+            config.validate(dict(profile(), versions={'java': '21'}))
+
     def test_extra_commands_are_names_not_scripts_paths_or_options(self):
         for tools in (['../tool'], ['/bin/sh'], ['a b'], ['$(id)'], ['--version'], ['a\nb'],
                       ['.'], ['..'], ['foo', 'foo'], [None], 'go', ['x' * 65],
@@ -113,6 +130,7 @@ class ProfileCLITests(unittest.TestCase):
             self.skipTest('configure intentionally refuses root')
         for args, expected in ((['--profile', 'generic', '--require-tool', 'terraform'], []),
                                (['--profile', 'backend', '--node-version', '24'], ['docker', 'node']),
+                               (['--profile', 'android', '--java-version', '21'], ['android', 'java', 'ruby']),
                                (['--capability', 'docker'], ['docker'])):
             with self.subTest(args=args), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / 'config.json'
@@ -136,6 +154,7 @@ class ProfileCLITests(unittest.TestCase):
     def test_conflicting_or_invalid_profile_flags_leave_no_file(self):
         for args in (['--platforms', 'ios', '--profile', 'generic'],
                      ['--profile', 'generic', '--node-version', '24'],
+                     ['--profile', 'generic', '--java-version', '21'],
                      ['--profile', 'generic', '--require-tool', '/bin/sh'],
                      ['--profile', 'generic', '--ruby-version', '3.3'],
                      ['--profile', 'node', '--xcode-version', '26.3']):
@@ -186,8 +205,24 @@ class EnvironmentTests(unittest.TestCase):
 
     def test_shell_renderer_unsets_stale_profile_variables(self):
         script = kit.shell_environment(profile(), Path('/Users/ci'))
-        for name in ('ANDROID_HOME', 'ANDROID_SDK_ROOT', 'DEVELOPER_DIR', 'DOCKER_CONFIG', *kit.DOCKER_OVERRIDES):
+        for name in ('ANDROID_HOME', 'ANDROID_SDK_ROOT', 'JAVA_HOME', 'DEVELOPER_DIR',
+                     'DOCKER_CONFIG', *kit.DOCKER_OVERRIDES):
             self.assertIn('unset ' + name, script)
+
+    def test_java_home_is_derived_from_ci_path_not_inherited_android_studio(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            jdk = home / 'jdk'
+            (jdk / 'bin').mkdir(parents=True)
+            (jdk / 'bin/java').write_text('#!/bin/sh\n')
+            (jdk / 'bin/java').chmod(0o755)
+            (jdk / 'release').write_text('JAVA_VERSION="21"\n')
+            cfg = profile('generic', extra=['java'])
+            cfg['path_prepend'] = ['${HOME}/jdk/bin']
+            with patch.dict(os.environ, {'JAVA_HOME': '/Applications/Android Studio.app/Contents/jbr'}):
+                env = kit.environment(cfg, home)
+            self.assertEqual(env['JAVA_HOME'], str(jdk.resolve()))
+            self.assertNotIn('Android Studio', env['PATH'])
 
 
 class ProbeTests(unittest.TestCase):
@@ -197,6 +232,13 @@ class ProbeTests(unittest.TestCase):
             output = Mock(return_value=(True, version))
             self.assertEqual(workloads.node_ready(output, {}, major), expected)
             output.assert_called_once_with(['node', '--version'], {})
+
+    def test_java_version_parses_modern_jdks_only(self):
+        for value, expected in ((('openjdk version "21.0.8" 2025-07-15'), '21'),
+                                (('java version "25" 2025-09-16'), '25'),
+                                (('openjdk 21.0.8'), None), ('', None)):
+            with self.subTest(value=value):
+                self.assertEqual(workloads.java_version(value), expected)
 
     def test_local_docker_is_probed_without_starting_containers(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -254,6 +296,9 @@ class ProbeTests(unittest.TestCase):
         with patch.object(kit, 'run', side_effect=subprocess.TimeoutExpired('docker', 15)) as run:
             self.assertEqual(kit.output(['docker', 'info']), (False, ''))
         self.assertEqual(run.call_args.kwargs['timeout'], 15)
+        with patch.object(kit, 'run', side_effect=subprocess.TimeoutExpired('java', 15)) as run:
+            self.assertEqual(kit.output_all(['java', '-version']), (False, ''))
+        self.assertEqual(run.call_args.kwargs['timeout'], 15)
 
 
 class DoctorTests(unittest.TestCase):
@@ -299,6 +344,24 @@ class DoctorTests(unittest.TestCase):
         with patch.object(kit, 'output', side_effect=output), \
                 patch.object(workloads, 'docker_probe', return_value=docker):
             self.assertTrue(kit.doctor(profile('backend', node='24'), print_report=False))
+
+    def test_java_capability_checks_selected_home_and_exact_major(self):
+        cfg = profile('generic', extra=['java'])
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            jdk = home / 'jdk'
+            (jdk / 'bin').mkdir(parents=True)
+            (jdk / 'bin/java').write_text('#!/bin/sh\n')
+            (jdk / 'bin/java').chmod(0o755)
+            (jdk / 'release').touch()
+            cfg['path_prepend'] = ['${HOME}/jdk/bin']
+            self.which.side_effect = lambda name, **_: str(jdk / 'bin/java') if name == 'java' else '/fixture/tool'
+            with patch.object(kit.Path, 'home', return_value=home), \
+                    patch.object(kit, 'output_all', return_value=(True, 'openjdk version "21.0.8"')):
+                self.assertTrue(kit.doctor(cfg, print_report=False))
+            with patch.object(kit.Path, 'home', return_value=home), \
+                    patch.object(kit, 'output_all', return_value=(True, 'openjdk version "25"')):
+                self.assertFalse(kit.doctor(cfg, print_report=False))
 
     def test_host_preflight_does_not_contact_owner_docker_daemon(self):
         def output(args, env):

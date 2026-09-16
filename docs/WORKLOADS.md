@@ -32,8 +32,8 @@ All fields are optional. `{}` selects only the base runner, not mobile defaults.
 | `tool_versions` | Optional numeric version prefixes for selected `required_tools`: `3`, `3.12` or `3.12.8` |
 | `path_prepend` | Up to 16 tool directories, searched after protected `~/bin` and before built-in tool paths |
 | `minimum_free_gib` | Required free space, integer 20–1000; default 20 |
-| `capabilities` | Optional built-in integration checks: `docker`, `node`, `ruby`, `android`, `ios`; default empty |
-| `versions` | Constraints for selected integrations: Node major, Ruby major.minor, Xcode major.minor |
+| `capabilities` | Optional built-in integration checks: `docker`, `java`, `node`, `ruby`, `android`, `ios`; default empty |
+| `versions` | Constraints for selected integrations: Java/Node major, Ruby/Xcode major.minor |
 
 For `tool_versions`, `doctor` executes only `COMMAND --version`, under the CI account,
 with a 15-second timeout. The first stdout line must contain one unambiguous stable dotted
@@ -55,6 +55,7 @@ No dependencies are copied/installed automatically except the explicitly selecte
 ## Built-in integrations and optional shortcuts
 
 - `docker`: CLI and reachable **local Unix-socket daemon** in the CI account's own context.
+- `java`: exact major JDK selection, managed `JAVA_HOME` and `java -version` check.
 - `node`: Node.js + npm; optional `versions.node` major constraint.
 - `ruby`: Ruby; requires `versions.ruby`.
 - `android`: copied SDK/JDK/emulator readiness; does **not** implicitly require Ruby.
@@ -66,7 +67,7 @@ languages. Combine any of them with arbitrary tools, or select no integrations a
 CLI shorthand remains available: repeat `--capability` and `--require-tool`.
 `--profile generic|node|backend|android|ios|mobile` merely expands a convenience preset;
 `bash runner profiles` lists the expansion. Mobile presets include Ruby for compatibility.
-`--node-version`, `--ruby-version` and `--xcode-version` constrain those shortcuts.
+`--java-version`, `--node-version`, `--ruby-version` and `--xcode-version` constrain those shortcuts.
 Use either a requirements file **or** workload flags, never an ambiguous merge of both.
 
 ## Setup, checks and updates
@@ -87,6 +88,16 @@ use a requirements file or `--profile generic` to choose the base explicitly.
 Legacy settings normalize to schema v2 in memory; source files are never rewritten.
 New v2 fields `tool_versions`/`path_prepend` default to empty if absent.
 Unknown fields/schema versions fail closed. An older wrapper cannot read new fields.
+
+New `android` and `mobile` profiles include Java 21. Existing legacy and previously created
+schema-v2 configs keep their declared capabilities unchanged during an update. To adopt the
+managed JDK contract, create and review a fresh requirements file/config while the runner is stopped.
+The kit derives `JAVA_HOME` only from a complete JDK found in its managed PATH; it does not
+silently use Android Studio's bundled Java. Flutter projects should still bind Flutter explicitly:
+
+```bash
+flutter config --jdk-dir="$JAVA_HOME"
+```
 
 To change requirements: stop all jobs/listeners, prepare a fresh local config from reviewed
 source and rerun setup with the same repository/user/label. This regenerates login settings
