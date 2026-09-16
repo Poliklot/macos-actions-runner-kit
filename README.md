@@ -102,7 +102,9 @@ Keep the terminal/lid open and the Mac on power. After **all workflow jobs** fin
 Enter `exit` to return to your account. Registration is kept for next time.
 
 > [!TIP]
-> Check prerequisites: `ci-runner doctor`. Russian: `ci-runner --lang ru doctor`.
+> Check prerequisites: `ci-runner doctor`. Use `ci-runner doctor --verbose` and
+> `ci-runner doctor --explain CHECK` for details, or `ci-runner doctor --json` for automation.
+> Russian: `ci-runner --lang ru doctor`.
 > To update, stop the runner and repeat setup from reviewed new source. See [operations](tool/runner/OPERATIONS.md).
 
 This kit prepares a runner, **not a universal signed Flutter release pipeline**.

@@ -191,6 +191,36 @@
     "ru": "Проверить всё без установки/регистрации",
     "en": "Check requirements without installing or registering"
   },
+  "doctor_verbose_help": {
+    "ru": "Показать обнаруженные пути, версии и подробности",
+    "en": "Show detected paths, versions and details"
+  },
+  "doctor_json_help": {
+    "ru": "Вывести структурированный JSON без поясняющего текста",
+    "en": "Print structured JSON without explanatory text"
+  },
+  "doctor_explain_help": {
+    "ru": "Подробно объяснить одну проверку или группу проверок",
+    "en": "Explain one check or check group in detail"
+  },
+  "diagnostic_unknown": {
+    "ru": "Неизвестная проверка: %s. Используй doctor --verbose, чтобы увидеть идентификаторы.",
+    "en": "Unknown check: %s. Use doctor --verbose to list check identifiers."
+  },
+  "diagnostic_detected": {"ru": "Обнаружено", "en": "Detected"},
+  "diagnostic_cause": {"ru": "Причина", "en": "Cause"},
+  "diagnostic_fix": {"ru": "Исправление", "en": "Fix"},
+  "diagnostic_actor": {"ru": "Выполняет", "en": "Run as"},
+  "diagnostic_verify": {"ru": "Проверка", "en": "Verify"},
+  "diagnostic_docs": {"ru": "Документация", "en": "Documentation"},
+  "actor_admin": {"ru": "администратор Mac", "en": "Mac administrator"},
+  "actor_ci": {"ru": "CI-пользователь", "en": "CI user"},
+  "version_any": {"ru": "любая поддерживаемая версия", "en": "any supported version"},
+  "none": {"ru": "нет", "en": "none"},
+  "docker_cause_generic": {
+    "ru": "Docker context не удалось безопасно проверить или локальный daemon не отвечает.",
+    "en": "The Docker context could not be inspected safely or its local daemon is unreachable."
+  },
   "host_help": {
     "ru": "Проверка инструментов до создания CI-пользователя",
     "en": "Check tools before creating the CI user"

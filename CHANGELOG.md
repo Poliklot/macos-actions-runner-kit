@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added stable diagnostic identifiers and structured readiness results.
+- Added verbose, focused explanation and schema-versioned JSON doctor output without
+  exposing inherited environment values or credentials.
+- Attached detected values, responsible account and verification commands to failed checks.
+
 ## 0.2.0-alpha.1 — 2026-09-11
 
 - Made portable project requirements the primary interface: arbitrary CLI tools,

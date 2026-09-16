@@ -66,6 +66,11 @@ Python and Bash use one catalog. External runner/macOS/tool logs retain their or
 
 ## Starting and stopping
 
+`doctor` assigns every probe a stable identifier. Use `doctor --verbose` to show detected
+paths and versions, `doctor --explain CHECK` for one check or prefix (for example `docker`),
+and `doctor --json` for a schema-versioned machine-readable report. JSON includes only
+managed diagnostic values; inherited environment values and credentials are not emitted.
+
 `start` keeps the official runner in the foreground under `caffeinate -i` and prevents
 concurrent kit starts. Terminal Ctrl+C reaches the official runner; the wrapper waits for it.
 No background service, automatic dispatch or cloud fallback is installed.

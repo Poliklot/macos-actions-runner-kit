@@ -32,6 +32,7 @@ from ios_platform_probe import available as ios_platform_available
 import i18n
 import configuration
 import workloads
+from diagnostics import CheckResult, Report
 from i18n import tr
 
 ROOT = Path(__file__).resolve().parent
@@ -159,7 +160,7 @@ def require_ci(cfg: dict):
         raise ValueError(tr('ci_login', cfg["ci_user"], cfg["ci_user"]))
 
 
-def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
+def doctor_report(cfg: dict, *, host=False, sdk=None) -> Report:
     cfg = configuration.normalized(cfg)
     caps, versions = cfg["capabilities"], cfg["versions"]
     home = Path.home()
@@ -170,95 +171,143 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True) -> bool:
     for path in cfg.get("path_prepend", []):
         if not workloads.path_ready(Path(path.replace("${HOME}", str(home), 1)), home):
             raise ValueError(tr('tool_path_fix'))
-    rows = []
+    rows: list[CheckResult] = []
 
-    def check(ok, title, fix):
-        rows.append((bool(ok), title, fix))
+    def check(check_id, ok, title, fix, *, detected=None, cause=None, verify=None,
+              actor=None, docs=None):
+        rows.append(CheckResult(check_id, bool(ok), title, fix, detected, cause,
+                                verify, actor, docs))
 
-    check(platform.system() == "Darwin", "macOS", tr('mac_required'))
-    check(platform.machine() in ("arm64", "x86_64"), tr('architecture'), tr('architecture_required'))
+    system = platform.system()
+    machine = platform.machine()
+    check("host.macos", system == "Darwin", "macOS", tr('mac_required'),
+          detected=system, actor=tr("actor_admin"), verify="uname -s")
+    check("host.architecture", machine in ("arm64", "x86_64"), tr('architecture'),
+          tr('architecture_required'), detected=machine, actor=tr("actor_admin"),
+          verify="uname -m")
     free = shutil.disk_usage(home).free / 1024**3
-    check(free >= cfg["minimum_free_gib"], tr('free_space', f"{free:.1f}"), tr('free_space_fix', cfg["minimum_free_gib"]))
+    check("host.free-space", free >= cfg["minimum_free_gib"],
+          tr('free_space', f"{free:.1f}"), tr('free_space_fix', cfg["minimum_free_gib"]),
+          detected=f"{free:.1f} GiB; minimum {cfg['minimum_free_gib']} GiB",
+          actor=tr("actor_admin"), verify="df -h $HOME")
     if not host:
-        check(current_ci(cfg), tr('ci_user', cfg["ci_user"]),
-              tr('ci_user_fix', cfg["ci_user"]))
+        ci_ok = current_ci(cfg)
+        check("account.ci-user", ci_ok, tr('ci_user', cfg["ci_user"]),
+              tr('ci_user_fix', cfg["ci_user"]), detected=pwd.getpwuid(os.getuid()).pw_name,
+              actor=tr("actor_admin"), verify=f"sudo -iu {cfg['ci_user']} && ci-runner doctor")
     for tool in dict.fromkeys(["python3", "git", "curl", "jq", "gh",
                                *(cfg["required_tools"] if not host else [])]):
-        check(shutil.which(tool, path=env["PATH"]), tr('command', tool),
-              tr('tools_install'))
+        location = shutil.which(tool, path=env["PATH"])
+        check(f"tool.{tool}", location, tr('command', tool), tr('tools_install'),
+              detected=location or tr("missing"), actor=tr("actor_admin"),
+              verify=f"command -v {tool}")
     if not host:
         for tool, version in cfg.get("tool_versions", {}).items():
             # Never execute manifest-selected tools under the owner's account or root.
-            check(current_ci(cfg) and workloads.tool_ready(output, env, tool, version),
-                  tool + " " + version, tr('tool_version_fix'))
+            ok = current_ci(cfg) and workloads.tool_ready(output, env, tool, version)
+            check(f"tool-version.{tool}", ok, tool + " " + version,
+                  tr('tool_version_fix'), detected=f"required prefix {version}",
+                  actor=tr("actor_ci"), verify=f"{tool} --version")
     if "ruby" in caps:
         ok, version = output(["ruby", "-e", "print RUBY_VERSION"], env)
-        check(ok and version.startswith(versions["ruby"] + "."), f"Ruby: {version or tr('missing')}",
-              tr('ruby_fix', versions["ruby"]))
+        check("runtime.ruby", ok and version.startswith(versions["ruby"] + "."),
+              f"Ruby: {version or tr('missing')}", tr('ruby_fix', versions["ruby"]),
+              detected=version or tr("missing"), actor=tr("actor_admin"),
+              verify='ruby -e \'print RUBY_VERSION\'')
     if "node" in caps:
-        check(workloads.node_ready(output, env, versions.get("node")),
-              "Node.js" + (" " + versions["node"] if "node" in versions else ""), tr('node_fix'))
-        check(output(["npm", "--version"], env)[0], "npm", tr('node_fix'))
+        node_ok = workloads.node_ready(output, env, versions.get("node"))
+        check("runtime.node", node_ok,
+              "Node.js" + (" " + versions["node"] if "node" in versions else ""),
+              tr('node_fix'), detected=versions.get("node", tr("version_any")),
+              actor=tr("actor_admin"), verify="node --version")
+        npm_ok, npm_version = output(["npm", "--version"], env)
+        check("runtime.npm", npm_ok, "npm", tr('node_fix'),
+              detected=npm_version or tr("missing"), actor=tr("actor_admin"),
+              verify="npm --version")
     if "docker" in caps:
         if host:
             # Setup must not depend on (or contact) the owner's personal daemon.
-            check(shutil.which("docker", path=env["PATH"]), "Docker CLI", tr('docker_fix'))
+            docker_cli = shutil.which("docker", path=env["PATH"])
+            check("docker.cli", docker_cli, "Docker CLI", tr('docker_fix'),
+                  detected=docker_cli or tr("missing"), actor=tr("actor_admin"),
+                  verify="command -v docker")
         else:
-            check(workloads.docker_ready(output, env), tr('docker_daemon'), tr('docker_fix'))
+            docker_ok = workloads.docker_ready(output, env)
+            check("docker.daemon", docker_ok, tr('docker_daemon'), tr('docker_fix'),
+                  detected=env["DOCKER_CONFIG"], cause=None if docker_ok else tr("docker_cause_generic"),
+                  actor=tr("actor_ci"), verify="docker info")
     if "ios" in caps:
         ok, version = output(["xcodebuild", "-version"], env)
-        check(ok and version.splitlines()[0:1] == [f'Xcode {versions["xcode"]}'],
+        check("xcode.version", ok and version.splitlines()[0:1] == [f'Xcode {versions["xcode"]}'],
               f'Xcode {versions["xcode"]}',
-              f'https://developer.apple.com/download/all/?q=Xcode%20{versions["xcode"]}')
+              f'https://developer.apple.com/download/all/?q=Xcode%20{versions["xcode"]}',
+              detected=f"{env['DEVELOPER_DIR']}: {version or tr('missing')}",
+              actor=tr("actor_admin"), verify="xcodebuild -version")
         ok, _ = output(["xcodebuild", "-checkFirstLaunchStatus"], env)
         sdk_ok, sdk_version = output(["xcrun", "--sdk", "iphoneos", "--show-sdk-version"], env)
-        check(ok and sdk_ok, tr('ios_sdk', sdk_version or tr('not_ready')),
-              tr('xcode_fix', versions["xcode"]))
+        check("xcode.first-launch", ok and sdk_ok,
+              tr('ios_sdk', sdk_version or tr('not_ready')),
+              tr('xcode_fix', versions["xcode"]), detected=sdk_version or tr("not_ready"),
+              actor=tr("actor_admin"), verify="xcodebuild -checkFirstLaunchStatus")
         # SDK metadata can exist without installed/enabled platform support.
-        check(ok and sdk_ok and ios_platform_available(env), tr('ios_build_destination'),
-              tr('ios_platform_fix', versions["xcode"]))
+        destination_ok = ok and sdk_ok and ios_platform_available(env)
+        check("xcode.ios-platform", destination_ok, tr('ios_build_destination'),
+              tr('ios_platform_fix', versions["xcode"]), detected=env["DEVELOPER_DIR"],
+              actor=tr("actor_admin"), verify="ci-runner doctor --explain xcode.ios-platform")
         if not host and current_ci(cfg):
             try:
                 paths = default_keychain()
                 ok, _ = output(["security", "list-keychains", "-d", "user"], env)
                 ok = ok and (not paths or Path(paths[0]).is_file())
                 detail = tr('keychain_present') if paths else tr('keychain_absent')
-                check(ok, tr("keychain_state", detail), tr('keychain_error'))
+                check("keychain.api", ok, tr("keychain_state", detail), tr('keychain_error'),
+                      detected=detail, actor=tr("actor_ci"),
+                      verify="security list-keychains -d user")
             except OSError as error:
-                check(False, "Keychain API", str(error))
+                check("keychain.api", False, "Keychain API", str(error), cause=str(error),
+                      actor=tr("actor_ci"), verify="security list-keychains -d user")
     if "android" in caps:
         sdk_path = Path(env["ANDROID_HOME"])
         required = ["platform-tools/adb", "emulator/emulator", "cmdline-tools/latest/bin/sdkmanager",
                     "cmdline-tools/latest/bin/avdmanager"]
         sdk_ok = all((sdk_path / p).is_file() and os.access(sdk_path / p, os.X_OK)
                      for p in required) and (sdk_path / "build-tools").is_dir()
-        check(sdk_ok, f"Android SDK: {sdk_path}",
-              tr('sdk_required'))
-        check(not (sdk_path / ".local-ci-sdk-copy-in-progress").exists(), tr('sdk_copied'),
-              tr('sdk_interrupted'))
+        check("android.sdk", sdk_ok, f"Android SDK: {sdk_path}", tr('sdk_required'),
+              detected=str(sdk_path), actor=tr("actor_admin"),
+              verify=f"test -x {shlex.quote(str(sdk_path / 'platform-tools/adb'))}")
+        copy_ok = not (sdk_path / ".local-ci-sdk-copy-in-progress").exists()
+        check("android.sdk-copy", copy_ok, tr('sdk_copied'), tr('sdk_interrupted'),
+              detected=str(sdk_path), actor=tr("actor_admin"), verify="ci-runner doctor")
         if sdk_ok and not host:
-            check(sdk_path.resolve().is_relative_to(home.resolve()) and sdk_path.stat().st_uid == os.getuid(),
-                  tr('sdk_owner'), tr('setup_repeat'))
+            owned = sdk_path.resolve().is_relative_to(home.resolve()) and sdk_path.stat().st_uid == os.getuid()
+            check("android.sdk-owner", owned, tr('sdk_owner'), tr('setup_repeat'),
+                  detected=str(sdk_path), actor=tr("actor_admin"), verify="ls -ld \"$ANDROID_HOME\"")
             ok, _ = output([str(sdk_path / "cmdline-tools/latest/bin/sdkmanager"), "--version"], env)
-            check(ok, "SDK Manager / Java", tr('jdk_required'))
+            check("android.sdkmanager-java", ok, "SDK Manager / Java", tr('jdk_required'),
+                  actor=tr("actor_admin"), verify="sdkmanager --version")
             ok, _ = output([str(sdk_path / "emulator/emulator"), "-accel-check"], env)
-            check(ok, tr('emulator_acceleration'), tr('emulator_fix'))
+            check("android.emulator-acceleration", ok, tr('emulator_acceleration'), tr('emulator_fix'),
+                  actor=tr("actor_admin"), verify="emulator -accel-check")
     if not host and ("android" in caps or "ios" in caps):
         # Detect recovery journals left by this repository's existing signing helper.
         journals = list((home / "Library/Caches").glob("*-signing-state"))
-        check(not journals, tr('signing_clean'),
-              tr('signing_recover'))
+        check("signing.recovery", not journals, tr('signing_clean'), tr('signing_recover'),
+              detected=", ".join(map(str, journals)) or tr("none"), actor=tr("actor_ci"),
+              verify="find \"$HOME/Library/Caches\" -name '*-signing-state' -maxdepth 1")
+    return Report(rows, host=host)
+
+
+def doctor(cfg: dict, *, host=False, sdk=None, print_report=True, verbose=False,
+           json_output=False, explain=None) -> bool:
+    report = doctor_report(cfg, host=host, sdk=sdk)
     if print_report:
-        for ok, title, fix in rows:
-            status = "OK" if ok else tr("needs_attention")
-            print(f"{status}  {title}")
-            if not ok:
-                print(f"       {fix}")
-        if host and "docker" in caps:
-            print(tr('docker_ci_only'))
-        print("\n" + (tr('doctor_ok')
-                        if all(r[0] for r in rows) else tr('doctor_failed')))
-    return all(row[0] for row in rows)
+        if json_output:
+            print(report.json_text(), end="")
+        else:
+            print(report.human_text(verbose=verbose, explain=explain,
+                                    docker_host_note=host and "docker" in configuration.normalized(cfg)["capabilities"]),
+                  end="")
+    return report.ready
 
 
 def setup(cfg, config_path, source_sdk):
@@ -458,6 +507,10 @@ def main(argv=None):
     sub.add_parser("shell-env", help=tr('shell_env_help'))
     d = sub.add_parser("doctor", help=tr('doctor_help'))
     d.add_argument("--host", action="store_true", help=tr('host_help'))
+    output_group = d.add_mutually_exclusive_group()
+    output_group.add_argument("--verbose", action="store_true", help=tr("doctor_verbose_help"))
+    output_group.add_argument("--json", action="store_true", dest="json_output", help=tr("doctor_json_help"))
+    output_group.add_argument("--explain", metavar="CHECK", help=tr("doctor_explain_help"))
     s = sub.add_parser("setup", help=tr('setup_help'))
     s.add_argument("--source-sdk", help=tr('sdk_help'))
     sub.add_parser("register", help=tr('register_help'))
@@ -475,7 +528,8 @@ def main(argv=None):
             print(shell_environment(cfg, Path.home()), end="")
             return 0
         if args.command == "doctor":
-            return 0 if doctor(cfg, host=args.host) else 1
+            return 0 if doctor(cfg, host=args.host, verbose=args.verbose,
+                               json_output=args.json_output, explain=args.explain) else 1
         if args.command == "setup":
             return setup(cfg, args.config, args.source_sdk)
         return register(cfg) if args.command == "register" else start(cfg)

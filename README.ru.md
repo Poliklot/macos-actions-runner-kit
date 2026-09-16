@@ -102,7 +102,9 @@ ci-runner start
 После завершения **всех заданий** нажми **Ctrl+C**. Команда `exit` вернёт в свой аккаунт.
 
 > [!TIP]
-> Проверка: `ci-runner doctor`. Английский: `ci-runner --lang en doctor`.
+> Проверка: `ci-runner doctor`. Для подробностей: `ci-runner doctor --verbose`,
+> `ci-runner doctor --explain ИДЕНТИФИКАТОР`; для автоматизации: `ci-runner doctor --json`.
+> Английский: `ci-runner --lang en doctor`.
 > Обновление: останови runner и повтори setup из проверенных новых исходников.
 > [Подробности и устранение ошибок](tool/runner/OPERATIONS.md).
 
