@@ -111,6 +111,9 @@ Enter `exit` to return to your account. Registration is kept for next time.
 > Russian: `ci-runner --lang ru doctor`.
 > To update, stop the runner and repeat setup from reviewed new source. See [operations](tool/runner/OPERATIONS.md).
 
+Release/support claims follow the staged [acceptance matrix](docs/ACCEPTANCE.md); offline tests alone
+do not prove a fresh CI account, signed delivery, a second Mac or Intel compatibility.
+
 This kit prepares a runner, **not a universal signed Flutter release pipeline**.
 Project build commands, signing, credential cleanup and delivery remain the workflow owner's responsibility.
 Reusable [workflow portability recipes](docs/WORKFLOW-RECIPES.md) cover developer-home path checks

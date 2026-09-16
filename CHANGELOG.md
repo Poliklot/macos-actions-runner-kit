@@ -21,6 +21,8 @@
   purge, plus a durable pre-delivery checkpoint contract for production workflows.
 - Added a read-only `plan` command that groups failed diagnostics into ordered, account-specific
   remediation steps with human and schema-versioned JSON output.
+- Added a staged acceptance matrix and an extended source/archive gate that reruns tests from a
+  fresh extraction and requires a byte-for-byte reproducible package.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 
