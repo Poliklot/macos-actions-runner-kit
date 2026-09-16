@@ -828,5 +828,29 @@
   "env_source_docker": {
     "ru": "изолированный Docker config CI-пользователя",
     "en": "isolated CI-account Docker config"
+  },
+  "plan_help": {
+    "ru": "Составить упорядоченный план исправлений без изменения компьютера",
+    "en": "Build an ordered remediation plan without changing the machine"
+  },
+  "plan_json_help": {
+    "ru": "Вывести план исправлений в JSON",
+    "en": "Print the remediation plan as JSON"
+  },
+  "plan_title": {
+    "ru": "План исправления окружения — шагов: %s",
+    "en": "Environment remediation plan — steps: %s"
+  },
+  "plan_ready": {
+    "ru": "Исправления не требуются: все проверки пройдены.",
+    "en": "No remediation is required: all checks passed."
+  },
+  "plan_actor_unknown": {
+    "ru": "оператор",
+    "en": "operator"
+  },
+  "plan_footer": {
+    "ru": "Выполняй шаги по порядку и после каждого повторяй ci-runner plan. Команда plan ничего не устанавливает, не запускает и не удаляет.",
+    "en": "Apply steps in order and rerun ci-runner plan after each one. The plan command installs, starts and deletes nothing."
   }
 }

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool/runner"))
-from diagnostics import CheckResult, Report
+from diagnostics import CheckResult, RemediationPlan, Report
 import configuration
 import i18n
 import runner
@@ -56,6 +56,32 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("runtime.node", output)
         with self.assertRaisesRegex(ValueError, "missing.check"):
             report.human_text(explain="missing.check")
+
+
+class RemediationPlanTests(unittest.TestCase):
+    def test_plan_contains_only_failures_and_deduplicates_same_action(self):
+        report = Report([
+            CheckResult("runtime.node", False, "Node", "Install Node", detected="missing",
+                        actor="administrator", verify="node --version"),
+            CheckResult("runtime.npm", False, "npm", "Install Node", detected="missing",
+                        actor="administrator", verify="npm --version"),
+            CheckResult("tool.git", True, "git", "Install git"),
+            CheckResult("docker.daemon", False, "Docker", "Start Colima", cause="socket missing",
+                        actor="CI user", verify="docker info"),
+        ], host=False)
+        plan = RemediationPlan(report)
+        self.assertEqual(len(plan.steps), 2)
+        self.assertEqual(plan.steps[0]["checks"], ["runtime.node", "runtime.npm"])
+        self.assertNotIn("tool.git", plan.human_text())
+        value = json.loads(plan.json_text())
+        self.assertFalse(value["ready"])
+        self.assertEqual(value["steps"][0]["number"], 1)
+        self.assertEqual(value["steps"][1]["actor"], "CI user")
+
+    def test_empty_plan_is_ready(self):
+        plan = RemediationPlan(Report([CheckResult("host.macos", True, "macOS", "fix")], host=True))
+        self.assertTrue(plan.ready)
+        self.assertEqual(json.loads(plan.json_text())["steps"], [])
 
 
 class DoctorOutputTests(unittest.TestCase):

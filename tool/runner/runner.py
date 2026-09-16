@@ -32,7 +32,7 @@ from ios_platform_probe import available as ios_platform_available
 import i18n
 import configuration
 import workloads
-from diagnostics import CheckResult, Report
+from diagnostics import CheckResult, RemediationPlan, Report
 from i18n import tr
 
 ROOT = Path(__file__).resolve().parent
@@ -433,6 +433,13 @@ def doctor(cfg: dict, *, host=False, sdk=None, print_report=True, verbose=False,
     return report.ready
 
 
+def plan(cfg: dict, *, host=False, json_output=False) -> bool:
+    """Print an ordered read-only remediation plan without changing the machine."""
+    result = RemediationPlan(doctor_report(cfg, host=host))
+    print(result.json_text() if json_output else result.human_text(), end="")
+    return result.ready
+
+
 def setup(cfg, config_path, source_sdk):
     if os.getuid() == 0:
         raise ValueError(tr('setup_no_root'))
@@ -637,6 +644,9 @@ def main(argv=None):
     output_group.add_argument("--verbose", action="store_true", help=tr("doctor_verbose_help"))
     output_group.add_argument("--json", action="store_true", dest="json_output", help=tr("doctor_json_help"))
     output_group.add_argument("--explain", metavar="CHECK", help=tr("doctor_explain_help"))
+    p = sub.add_parser("plan", help=tr("plan_help"))
+    p.add_argument("--host", action="store_true", help=tr("host_help"))
+    p.add_argument("--json", action="store_true", dest="json_output", help=tr("plan_json_help"))
     s = sub.add_parser("setup", help=tr('setup_help'))
     s.add_argument("--source-sdk", help=tr('sdk_help'))
     sub.add_parser("register", help=tr('register_help'))
@@ -659,6 +669,8 @@ def main(argv=None):
         if args.command == "doctor":
             return 0 if doctor(cfg, host=args.host, verbose=args.verbose,
                                json_output=args.json_output, explain=args.explain) else 1
+        if args.command == "plan":
+            return 0 if plan(cfg, host=args.host, json_output=args.json_output) else 1
         if args.command == "setup":
             return setup(cfg, args.config, args.source_sdk)
         return register(cfg) if args.command == "register" else start(cfg)

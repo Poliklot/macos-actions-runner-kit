@@ -79,3 +79,61 @@ class Report:
         if explain is None:
             lines.extend(("", tr("doctor_ok") if self.ready else tr("doctor_failed")))
         return "\n".join(lines) + "\n"
+
+
+class RemediationPlan:
+    """Ordered, deduplicated next actions derived from one completed report."""
+
+    def __init__(self, report: Report):
+        self.report = report
+        grouped: dict[tuple[str | None, str, str | None], dict] = {}
+        for check in report.checks:
+            if check.ok:
+                continue
+            key = (check.actor, check.remediation, check.docs)
+            step = grouped.setdefault(key, {
+                "checks": [], "actor": check.actor, "action": check.remediation,
+                "detected": [], "causes": [], "verify": [], "docs": check.docs,
+            })
+            step["checks"].append(check.check_id)
+            for field, value in (("detected", check.detected), ("causes", check.cause),
+                                 ("verify", check.verify)):
+                if value and value not in step[field]:
+                    step[field].append(value)
+        self.steps = list(grouped.values())
+
+    @property
+    def ready(self) -> bool:
+        return not self.steps
+
+    def json_text(self) -> str:
+        steps = []
+        for index, step in enumerate(self.steps, 1):
+            value = {"number": index, **step}
+            steps.append({key: item for key, item in value.items()
+                          if item is not None and item != []})
+        return json.dumps({
+            "schema": 1,
+            "ready": self.ready,
+            "scope": "host" if self.report.host else "ci",
+            "steps": steps,
+        }, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+    def human_text(self) -> str:
+        if self.ready:
+            return tr("plan_ready") + "\n"
+        lines = [tr("plan_title", len(self.steps))]
+        for index, step in enumerate(self.steps, 1):
+            actor = step["actor"] or tr("plan_actor_unknown")
+            lines.append(f"{index}. [{actor}] {', '.join(step['checks'])}")
+            for label, values in ((tr("diagnostic_detected"), step["detected"]),
+                                  (tr("diagnostic_cause"), step["causes"])):
+                for value in values:
+                    lines.append(f"   {label}: {value}")
+            lines.append(f"   {tr('diagnostic_fix')}: {step['action']}")
+            for value in step["verify"]:
+                lines.append(f"   {tr('diagnostic_verify')}: {value}")
+            if step["docs"]:
+                lines.append(f"   {tr('diagnostic_docs')}: {step['docs']}")
+        lines.extend(("", tr("plan_footer")))
+        return "\n".join(lines) + "\n"

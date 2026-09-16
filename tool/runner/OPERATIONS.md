@@ -76,6 +76,12 @@ paths and versions, `doctor --explain CHECK` for one check or prefix (for exampl
 and `doctor --json` for a schema-versioned machine-readable report. JSON includes only
 managed diagnostic values; inherited environment values and credentials are not emitted.
 
+`ci-runner plan` runs the same read-only probes, removes passing checks and groups identical
+remediation into an ordered list. Every step says which account acts, what was detected, the
+action and verification command. `plan --host` is the administrator-side preflight and
+`plan --json` emits schema 1. Plan never installs a package, starts Docker, accepts a licence,
+changes a keychain or deletes anything; apply one reviewed step and rerun it.
+
 `start` keeps the official runner in the foreground under `caffeinate -i` and prevents
 concurrent kit starts. Terminal Ctrl+C reaches the official runner; the wrapper waits for it.
 No background service, automatic dispatch or cloud fallback is installed.

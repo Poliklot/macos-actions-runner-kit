@@ -19,6 +19,8 @@
   public Apple WWDR certificate without modifying the System keychain.
 - Added a run-bound local artifact checkpoint with SHA-256 verification, safe restore and explicit
   purge, plus a durable pre-delivery checkpoint contract for production workflows.
+- Added a read-only `plan` command that groups failed diagnostics into ordered, account-specific
+  remediation steps with human and schema-versioned JSON output.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 

@@ -104,6 +104,8 @@ Enter `exit` to return to your account. Registration is kept for next time.
 > [!TIP]
 > Check prerequisites: `ci-runner doctor`. Use `ci-runner doctor --verbose` and
 > `ci-runner doctor --explain CHECK` for details, or `ci-runner doctor --json` for automation.
+> `ci-runner plan` turns all current failures into an ordered, account-specific remediation plan;
+> it is read-only and also supports `--host` and `--json`.
 > Use `ci-runner env` (or `ci-runner env --json`) to see only the environment values
 > managed by the wrapper and where they came from; inherited variables and secrets are omitted.
 > Russian: `ci-runner --lang ru doctor`.

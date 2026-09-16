@@ -26,7 +26,8 @@ ci-runner start
 ```
 
 Before registration, `ci-runner doctor --verbose` explains readiness failures and
-`ci-runner env` shows only the environment variables managed by this wrapper.
+`ci-runner plan` orders their fixes. `ci-runner env` shows only the environment variables
+managed by this wrapper. These reporting commands do not change the machine.
 
 Paste the token into the hidden prompt, never into a shell command. Run your prepared workflow
 with matching labels `[self-hosted, macOS, local-macos]`. Keep the Mac awake/on power;

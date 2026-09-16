@@ -104,6 +104,8 @@ ci-runner start
 > [!TIP]
 > Проверка: `ci-runner doctor`. Для подробностей: `ci-runner doctor --verbose`,
 > `ci-runner doctor --explain ИДЕНТИФИКАТОР`; для автоматизации: `ci-runner doctor --json`.
+> `ci-runner plan` собирает все ошибки в упорядоченный план с указанием нужного аккаунта;
+> команда ничего не меняет и также поддерживает `--host` и `--json`.
 > `ci-runner env` (или `ci-runner env --json`) показывает только управляемые wrapper-переменные
 > и их источник; унаследованные переменные и секреты в отчёт не попадают.
 > Английский: `ci-runner --lang en doctor`.
