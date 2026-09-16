@@ -112,6 +112,8 @@ ci-runner start
 
 Комплект устанавливает runner, **но не настраивает универсальную подпись и доставку Flutter**.
 Команды проекта, секреты и их очистка остаются ответственностью владельца workflow.
+В [переносимых workflow-рецептах](docs/WORKFLOW-RECIPES.md) есть проверка путей из домашнего
+каталога разработчика и actionlint installer с проверкой SHA-256 для macOS; CI проекта они сами не меняют.
 
 Для backend выбери `--profile backend` и подключи [пример Node workflow](examples/manual-node-ci.yml).
 Новая Android/mobile-конфигурация закрепляет `JAVA_HOME`; если Flutter всё равно выбирает
