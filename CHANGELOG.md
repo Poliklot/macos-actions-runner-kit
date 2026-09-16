@@ -17,6 +17,8 @@
   and install a pinned actionlint archive using either macOS `shasum` or GNU `sha256sum`.
 - Added an opt-in recoverable temporary signing-keychain recipe that imports a checksum-pinned
   public Apple WWDR certificate without modifying the System keychain.
+- Added a run-bound local artifact checkpoint with SHA-256 verification, safe restore and explicit
+  purge, plus a durable pre-delivery checkpoint contract for production workflows.
 
 ## 0.2.0-alpha.1 — 2026-09-11
 

@@ -89,3 +89,50 @@ blocks startup; inspect it and run `cleanup` rather than deleting the evidence.
 password while it runs. Keep the CI account dedicated, do not enable shell tracing, delete the
 workflow-created `.p12`/profile files in the project's own always-cleanup step, and scope/revoke
 the upstream secret independently.
+
+## Preserve build outputs before GitHub artifact upload
+
+GitHub Actions artifact storage is an external delivery mechanism, not the only safe place to
+hold a just-built APK/IPA. If quota or service availability breaks upload and the workflow then
+deletes its build directory, delivery requires an unnecessary rebuild. Copy
+`examples/scripts/local-artifact-checkpoint.py` and checkpoint outputs **after the complete build,
+test and signature verification gates but before upload/delivery and before project cleanup**:
+
+```bash
+python3 tool/ci/local-artifact-checkpoint.py store \
+  build/app/outputs/flutter-apk/app-dev-release.apk \
+  build/ios/ipa/App-dev.ipa
+```
+
+The helper copies only regular files inside `GITHUB_WORKSPACE` into a mode-0700 cache below the
+CI account's `~/Library/Caches`; files/manifests are mode 0600. The manifest binds repository and
+GitHub run ID, records the producing attempt, size and SHA-256, and is rechecked before every use.
+It refuses overwrite, basename collisions, symlinks and cross-workspace inputs.
+
+If upload fails, rerun the failed delivery job in the **same GitHub run on the same dedicated Mac
+and account**. A later attempt can verify and restore the checkpoint into a new workspace directory:
+
+```bash
+python3 tool/ci/local-artifact-checkpoint.py verify
+python3 tool/ci/local-artifact-checkpoint.py restore recovered-artifacts
+```
+
+Deliver only the restored, verified paths. After every intended destination independently confirms
+the exact build, remove the checkpoint explicitly:
+
+```bash
+python3 tool/ci/local-artifact-checkpoint.py purge
+```
+
+The helper never purges automatically on upload failure. That is intentional recovery behavior,
+but it requires an operator retention procedure so old APK/IPA files do not consume the disk.
+It is not encrypted and is readable by the CI account/root. It does not work if a rerun routes to
+another Mac, the local disk is lost, or a new run ID is created.
+
+For production delivery, add a **durable pre-delivery checkpoint** independent of Actions artifacts:
+a draft release asset or dedicated object storage with run/revision/build identity, SHA-256 manifest,
+immutable or versioned retention, minimum-scoped credentials and an explicit post-delivery policy.
+Create and verify that checkpoint before calling any store API. Do not send production binaries
+from an unversioned local path, and do not delete the last verified copy merely because one upload
+provider failed. The storage provider, retention, signing and promotion approvals are project
+decisions, so this public kit intentionally does not embed their credentials or APIs.

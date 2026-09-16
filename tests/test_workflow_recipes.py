@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PORTABILITY = ROOT / "examples/scripts/check-macos-portability.py"
 ACTIONLINT = ROOT / "examples/scripts/install-actionlint-macos.sh"
 SIGNING = ROOT / "examples/scripts/apple-signing-keychain.py"
+ARTIFACTS = ROOT / "examples/scripts/local-artifact-checkpoint.py"
 
 
 class PortabilityRecipeTests(unittest.TestCase):
@@ -75,6 +76,59 @@ class AppleSigningRecipeTests(unittest.TestCase):
                                 text=True, capture_output=True)
         self.assertEqual(result.returncode, 1)
         self.assertIn('SIGNING_STATE_NAME', result.stderr)
+
+
+class ArtifactCheckpointTests(unittest.TestCase):
+    def environment(self, home, workspace, **extra):
+        import os
+        value = dict(os.environ, HOME=str(home), GITHUB_WORKSPACE=str(workspace),
+                     GITHUB_REPOSITORY='sample-org/private-app', GITHUB_RUN_ID='12345',
+                     GITHUB_RUN_ATTEMPT='1')
+        value.update(extra)
+        return value
+
+    def run_tool(self, env, *args):
+        return subprocess.run([sys.executable, str(ARTIFACTS), *args], env=env,
+                              text=True, capture_output=True)
+
+    def test_store_verify_restore_and_explicit_purge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / 'home'
+            workspace = Path(directory) / 'workspace'
+            home.mkdir(); workspace.mkdir()
+            (workspace / 'app.apk').write_bytes(b'apk-fixture')
+            (workspace / 'app.ipa').write_bytes(b'ipa-fixture')
+            env = self.environment(home, workspace)
+            self.assertEqual(self.run_tool(env, 'store', 'app.apk', 'app.ipa').returncode, 0)
+            self.assertEqual(self.run_tool(env, 'verify').returncode, 0)
+            rerun = dict(env, GITHUB_RUN_ATTEMPT='2')
+            restored = self.run_tool(rerun, 'restore', 'restored')
+            self.assertEqual(restored.returncode, 0, restored.stderr)
+            self.assertEqual((workspace / 'restored/app.apk').read_bytes(), b'apk-fixture')
+            cache = home / 'Library/Caches/local-ci-artifacts/sample-org--private-app/12345'
+            self.assertEqual(cache.stat().st_mode & 0o777, 0o700)
+            self.assertTrue(all(path.stat().st_mode & 0o777 == 0o600
+                                for path in cache.iterdir() if path.is_file()))
+            self.assertEqual(self.run_tool(rerun, 'purge').returncode, 0)
+            self.assertFalse(cache.exists())
+
+    def test_tampering_cross_workspace_and_cross_run_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / 'home'
+            workspace = Path(directory) / 'workspace'
+            home.mkdir(); workspace.mkdir()
+            outside = Path(directory) / 'outside.ipa'
+            outside.write_bytes(b'outside')
+            env = self.environment(home, workspace)
+            self.assertNotEqual(self.run_tool(env, 'store', str(outside)).returncode, 0)
+            artifact = workspace / 'app.ipa'
+            artifact.write_bytes(b'original')
+            self.assertEqual(self.run_tool(env, 'store', 'app.ipa').returncode, 0)
+            cache_file = home / 'Library/Caches/local-ci-artifacts/sample-org--private-app/12345/app.ipa'
+            cache_file.write_bytes(b'tampered')
+            self.assertNotEqual(self.run_tool(env, 'verify').returncode, 0)
+            other_run = dict(env, GITHUB_RUN_ID='67890')
+            self.assertNotEqual(self.run_tool(other_run, 'verify').returncode, 0)
 
 
 if __name__ == "__main__":

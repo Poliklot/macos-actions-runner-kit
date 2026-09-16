@@ -69,3 +69,5 @@ versions must be documented when the first version is released.
 The optional [signing recipe](docs/WORKFLOW-RECIPES.md#temporary-apple-signing-keychain-with-an-explicit-wwdr-chain)
 is project-owned example code, not provisioning behavior. It avoids System-keychain mutation and
 leaves a recovery journal, but cannot protect signing secrets from already-compromised CI-account code.
+The optional local artifact checkpoint is integrity-checked and permission-restricted, not encrypted
+or durable. Treat retained mobile binaries as CI-account data and purge them only after verified delivery.

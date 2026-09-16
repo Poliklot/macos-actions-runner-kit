@@ -25,6 +25,7 @@
   "examples/scripts/apple-signing-keychain.py",
   "examples/scripts/check-macos-portability.py",
   "examples/scripts/install-actionlint-macos.sh",
+  "examples/scripts/local-artifact-checkpoint.py",
   "runner",
   "scripts/check.sh",
   "scripts/package.py",
