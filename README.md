@@ -130,6 +130,9 @@ This kit prepares a runner, **not a universal signed Flutter release pipeline**.
 Project build commands, signing, credential cleanup and delivery remain the workflow owner's responsibility.
 Reusable [workflow portability recipes](docs/WORKFLOW-RECIPES.md) cover developer-home path checks
 and a checksum-verified macOS actionlint installer without changing a project's CI automatically.
+For multiple runners on a developer Mac, use the optional [shared-host safety guide](docs/SHARED-HOSTS.md):
+resource diagnosis, a cross-repository workload lease and explicitly installed headless cache maintenance.
+These recipes do not change the kit's on-demand default or install a runner service.
 
 For backend, select `--profile backend` and follow the [Node workflow example](examples/manual-node-ci.yml).
 New Android/mobile configurations pin `JAVA_HOME`; if Flutter still prefers Android Studio's
