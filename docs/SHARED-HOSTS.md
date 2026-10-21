@@ -36,6 +36,18 @@ simulator, agents or apps to make CI green. Never delete swap files. Connecting 
 mobile app to a staging API can remove the need for a local backend/database, but
 does not eliminate local Flutter/Xcode builds or the simulator.
 
+## A second gate failure is not necessarily the same incident
+
+After restoring capacity, run the unchanged gate from the start. A strict audit
+may reveal an independently vulnerable locked dependency. Check each package
+manager's lockfile **and existing nested resolutions/overrides**: updating a direct
+range while leaving a vulnerable test-tool override pinned is incomplete. Prefer
+an available patched release in the existing major, regenerate the lock with its
+package manager, retain immutable installs, and re-run production and development
+audits plus tests/build. Do not use blanket audit suppression, `audit fix --force`,
+or a cache purge as a security fix. Keep resource repair, diagnostic changes and
+each dependency remediation in separate reviewable commits.
+
 ## Prepare a shared workload lease
 
 GitHub workflow concurrency groups are repository-scoped. Identical group names in
