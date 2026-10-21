@@ -67,6 +67,8 @@ The CI account can explicitly opt into `run --clean-first` to clean and check di
 under the same lease before starting the command. A developer's normal account
 may use `run`, but cannot use destructive cleanup. Cancellation forwards the signal
 to the owned child group and keeps the lease until the direct child has exited.
+Remaining same-group compilers are stopped before releasing the lease, even when
+the leader has exited. Detached groups remain the workload’s responsibility.
 The helper never dispatches GitHub jobs and cannot control unwrapped commands.
 Migrate all participating workflows before relying on workload serialization.
 

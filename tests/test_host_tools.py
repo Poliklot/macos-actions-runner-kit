@@ -84,6 +84,51 @@ class LeaseTests(unittest.TestCase):
                 if process.poll() is None:
                     process.kill(); process.wait()
 
+    def test_orphaned_same_group_compiler_is_stopped_before_lease_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory).resolve()
+            lock = directory / 'lock'
+            lock.touch(mode=0o600)
+            marker = directory / 'compiler'
+            compiler = ('import os,signal,time,pathlib; '
+                        'signal.signal(signal.SIGTERM, signal.SIG_IGN); '
+                        f'pathlib.Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(60)')
+            leader = ('import subprocess,sys,signal,time; '
+                      'signal.signal(signal.SIGTERM, lambda *a: exit(0)); '
+                      f'subprocess.Popen([sys.executable,"-c",{compiler!r}]); time.sleep(60)')
+            wrapper = ('import importlib.util,sys; '
+                       f's=importlib.util.spec_from_file_location("h",{str(ROOT / "examples/scripts/ci-host.py")!r}); '
+                       'h=importlib.util.module_from_spec(s);s.loader.exec_module(h);'
+                       f'\nwith h.lease({str(lock)!r}):\n sys.exit(h.run_command([{sys.executable!r},"-c",{leader!r}]))')
+            process = subprocess.Popen([sys.executable, '-c', wrapper])
+            compiler_pid = None
+            try:
+                for _ in range(100):
+                    if marker.exists():
+                        compiler_pid = int(marker.read_text()); break
+                    time.sleep(0.05)
+                self.assertIsNotNone(compiler_pid)
+                process.send_signal(signal.SIGTERM)
+                self.assertEqual(process.wait(timeout=15), 143)
+                for _ in range(100):
+                    state = subprocess.run(['ps', '-p', str(compiler_pid), '-o', 'stat='],
+                                           capture_output=True, text=True)
+                    if state.returncode or state.stdout.strip().startswith('Z'):
+                        break
+                    time.sleep(0.05)
+                else:
+                    self.fail('Compiler survived the workload lease')
+                with host.lease(lock):
+                    pass
+            finally:
+                if process.poll() is None:
+                    process.kill(); process.wait()
+                if compiler_pid:
+                    try:
+                        os.kill(compiler_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
 
 class ProcessTests(unittest.TestCase):
     def test_vanished_process_does_not_block_maintenance_but_live_failure_does(self):

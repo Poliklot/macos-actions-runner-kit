@@ -263,6 +263,14 @@ def run_command(command):
             except subprocess.TimeoutExpired:
                 os.killpg(child.pid, signal.SIGKILL)
                 child.wait()
+        # A shell/leader can exit on TERM while its compiler ignores TERM. Do
+        # not release the host lease with survivors in the owned process group,
+        # even after a nominally successful leader exit. Detached groups remain
+        # the workload's responsibility.
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         for signum, handler in previous.items():
             signal.signal(signum, handler)
 
