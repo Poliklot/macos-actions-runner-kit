@@ -79,8 +79,18 @@ def active_builds():
         name = Path(command).name
         busy = name in {'Runner.Worker', 'xcodebuild', 'swift-frontend', 'gradle', 'gradlew'}
         if name in {'java', 'dart', 'dartvm', 'docker', 'docker-buildx', 'node'}:
-            args = subprocess.check_output(
-                ['/bin/ps', '-p', pid, '-o', 'args='], text=True, timeout=5).strip()
+            try:
+                args = subprocess.check_output(
+                    ['/bin/ps', '-p', pid, '-o', 'args='], text=True, timeout=5).strip()
+            except subprocess.CalledProcessError:
+                # A short-lived tool may exit between the process snapshot and
+                # this query. Ignore only a confirmed vanished PID; permission
+                # or inspection failures for a live process still fail closed.
+                try:
+                    os.kill(int(pid), 0)
+                except ProcessLookupError:
+                    continue
+                raise
             busy = bool(re.search(
                 r'GradleMain|GradleWorkerMain|flutter_tools.*\b(build|test|run)\b|'
                 r'\bdocker(?:-buildx)?\s+(?:build|buildx\s+build)\b|'

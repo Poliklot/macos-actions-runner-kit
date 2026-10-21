@@ -85,6 +85,18 @@ class LeaseTests(unittest.TestCase):
                     process.kill(); process.wait()
 
 
+class ProcessTests(unittest.TestCase):
+    def test_vanished_process_does_not_block_maintenance_but_live_failure_does(self):
+        outputs = ['999999 1 /usr/bin/node\n', subprocess.CalledProcessError(1, 'ps')]
+        with patch.object(host.subprocess, 'check_output', side_effect=outputs), \
+                patch.object(host.os, 'kill', side_effect=ProcessLookupError):
+            self.assertEqual(host.active_builds(), [])
+        with patch.object(host.subprocess, 'check_output', side_effect=outputs), \
+                patch.object(host.os, 'kill', return_value=None):
+            with self.assertRaises(subprocess.CalledProcessError):
+                host.active_builds()
+
+
 class CacheTests(unittest.TestCase):
     def make_cache(self, home):
         gradle = home / 'gradle'
