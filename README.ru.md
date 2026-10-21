@@ -1,5 +1,8 @@
 # macos-actions-runner-kit
 
+Для нескольких runner на рабочем Mac: [общий бюджет ресурсов и обслуживание без GUI](docs/SHARED-HOSTS.md).
+Это отдельный opt-in рецепт; обычный setup не включает фоновые службы и не меняет on-demand запуск.
+
 [English](README.md) · [Подключение workflow](docs/INTEGRATION.md) · [Границы безопасности](SECURITY.md)
 
 Включай свой Mac для GitHub Actions **только когда нужна сборка**.
