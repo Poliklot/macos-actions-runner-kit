@@ -140,6 +140,37 @@ Keep the shared script/lease while any other account or workflow still uses them
 Existing third-party LaunchAgents are not disabled by this installer; inspect and
 remove obsolete maintenance schedules separately, without touching runner services.
 
+## Diagnose bounded Node probes without hiding their failures
+
+Jest may render a rejected `execFile` as just `Command failed`, hiding the child's
+exit/signal/timeout metadata. Reuse [run-probe.cjs](../examples/scripts/run-probe.cjs)
+with its [TypeScript declaration](../examples/scripts/run-probe.d.cts) in project
+test support code. Both files are source recipes, not an npm dependency or a daemon.
+Keep the originating commit and SHA-256 when vendoring them into a private project.
+
+```js
+const { runProbe } = require('./run-probe.cjs');
+const result = await runProbe(['test/queue.probe.js'], {
+  name: 'queue-contract', timeout: 14000, env: process.env,
+});
+// Keep the project's existing assertions and timeout budget.
+if (result.stdout.trim() !== 'verified') throw new Error('Unexpected probe result');
+```
+
+Failure reports preserve exit code, signal, killed flag, configured timeout and
+elapsed time, with bounded stdout/stderr tails. They do not print full argv or the
+original error cause. Values of secret-bearing environment entries, database URL
+passwords and URL userinfo are redacted before truncation. The helper cannot infer
+arbitrary application-specific personal data: probes must use disposable test data
+and must not log real accounts/documents. A buffer-limit failure is not a timeout.
+
+This recipe runs a Node child directly, without a shell. `execFile` timeout controls
+that child, not arbitrary detached grandchildren. Projects spawning process trees
+must own their process-group cleanup and disposable resources separately. Keep DB
+guards and cleanup in the outer test runner. Reproduce the exact failed probes in
+a quiet window before changing deadlines; a resource snapshot alone is not proof
+of the reason for a past failure.
+
 ## Русский
 
 CI-пользователь отделяет права и секреты, но не выделяет отдельные RAM, CPU или диск.
@@ -170,3 +201,11 @@ host не выдаются за успех. Недостаточный резе�
 Приёмка выполняется в согласованное окно: проблемные probes → один полный CI →
 замеры до/после. Прохождение offline tests не равно живой приёмке. Откат таймера
 не должен останавливать runner или удалять данные другого пользователя.
+
+Для Node probes используйте `run-probe.cjs` и `run-probe.d.cts`: ошибка показывает
+exit code, signal, признак killed, timeout и длительность, а также ограниченные
+хвосты stdout/stderr с редактированием секретов. Исходные argv и error cause не
+печатаются. Сохраняйте существующие assertions, DB guards и лимиты; не увеличивайте
+таймауты до воспроизведения. Для произвольных дочерних деревьев проект отдельно
+отвечает за process-group cleanup. Пробники должны работать только с одноразовыми
+тестовыми данными: универсальный фильтр не распознаёт все виды персональных данных.
