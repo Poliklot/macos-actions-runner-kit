@@ -60,8 +60,19 @@ Wrap the whole install/test/build command, not individual subcommands that overl
 
 ```sh
 HOST='/Library/Application Support/Local Actions/Host Tools/ci-host.py'
-python3 "$HOST" run --wait-seconds 600 --minimum-free-gib 40 -- bash scripts/quality.sh
+python3 "$HOST" run --wait-seconds 2700 --minimum-free-gib 40 -- bash scripts/quality.sh
 ```
+
+Size admission separately from execution. A healthy full gate can hold the lease
+longer than ten minutes: a contender with `--wait-seconds 600` then exits **75**
+without starting its child. This is a queue-budget failure, not a compiler crash or
+evidence of OOM. The helper accepts a bounded wait of 0–3600 seconds; the example
+reserves 45 minutes. Waiting counts toward the GitHub job timeout, so reserve that
+time **in addition to** the project's usual execution budget, only on shared-host
+jobs. Keep hosted limits and test/probe deadlines unchanged. The lease is not FIFO
+and does not guarantee capacity under a continuous workload: long releases still
+need an agreed exclusive window. Verify contention with a real peer gate, not just
+a short `sleep`, and record a refusal as a refusal rather than a failed child.
 
 The CI account can explicitly opt into `run --clean-first` to clean and check disk
 under the same lease before starting the command. A developer's normal account
@@ -204,6 +215,14 @@ CI-пользователь отделяет права и секреты, но 
 сериализует тяжёлую работу через общий файловый lock. Одинаковый GitHub concurrency
 group в разных repositories этого не обеспечивает. Все тяжёлые CI и ручные сборки
 должны использовать один lock; не отключайте чужие VM/симулятор/приложения.
+
+Ожидание lock тоже расходует общий GitHub job timeout. Полный исправный gate может
+занимать больше десяти минут: код 75 после `--wait-seconds 600` означает отказ
+очереди, child ещё не запускался. Подберите ограниченное ожидание (0–3600 секунд)
+и добавьте его к прежнему бюджету только shared-host jobs; в примере — 45 минут.
+Не меняйте ради очереди deadlines тестов и probes. Lock не даёт FIFO/SLA при
+непрерывной нагрузке; длинные release требуют отдельного окна. Проверьте ожидание
+с настоящим полным соседним gate, а не только с коротким `sleep`.
 
 После обычного setup администратор устанавливает `install-ci-maintenance.py` с
 выбранным Python 3.12+, проверенным SHA-256, именем стандартного CI-пользователя и
