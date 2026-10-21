@@ -82,8 +82,11 @@ the administrator's cache, Docker configuration, signing state or credentials.
 
 The installer creates a **system LaunchDaemon with explicit UserName**, not a
 LaunchAgent requiring `gui/UID`. It pins the selected Python path, checks the script
-digest, takes the same host lease, rejects symlinks and protects both script and log
-paths from the CI account. Repeating the same installation is idempotent. A changed
+digest, takes the same host lease and rejects symlinks. The script and log directory
+are root-owned; the existing `0600` log belongs to the CI identity so launchd can
+open stdio after selecting UserName. A root-only log can cause `EX_CONFIG` before
+Python starts. The CI account cannot replace the log path in its protected parent.
+Repeating the same installation is idempotent. A changed
 installation requires explicit `--replace`; failure restores its previous files and
 service. Initial failures may leave empty protected directories and the lease file.
 

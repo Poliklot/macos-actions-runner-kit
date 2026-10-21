@@ -48,14 +48,14 @@ def service(user, python, *, minimum, target, gradle_homes):
                                     'PATH': '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'}}
 
 
-def protected(path, *, directory=False):
+def protected(path, *, directory=False, owners=(0,)):
     for component in (path, *path.parents):
         if component.is_symlink():
             raise ValueError('Refusing symlinked installation path')
     if path.exists():
         info = path.stat()
         kind = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
-        if not kind or info.st_uid != 0 or info.st_mode & 0o022:
+        if not kind or info.st_uid not in owners or info.st_mode & 0o022:
             raise ValueError('Installation paths must be root-owned and protected')
 
 
@@ -110,9 +110,16 @@ def install(args):
     target = ROOT / 'ci-host.py'
     plist = LAUNCH_DAEMONS / (definition['Label'] + '.plist')
     log = LOGS / f'{args.user}.log'
-    protected(log)
+    account = pwd.getpwnam(args.user)
+    protected(log, owners=(0, account.pw_uid))
+    log_changed = (not log.exists() or log.stat().st_uid != account.pw_uid
+                   or stat.S_IMODE(log.stat().st_mode) != 0o600)
     if not log.exists():
         atomic_write(log, b'', 0o600)
+    # launchd opens stdio with the target identity. Protect the directory from
+    # replacement/symlink attacks, but let that identity write its existing log.
+    os.chown(log, account.pw_uid, account.pw_gid)
+    os.chmod(log, 0o600)
     payload = plistlib.dumps(definition, sort_keys=True)
     for p, expected in ((target, data), (plist, payload)):
         protected(p)
@@ -123,7 +130,7 @@ def install(args):
         protected(receipt)
         originals = {p: (p.read_bytes(), stat.S_IMODE(p.stat().st_mode)) if p.exists() else None
                      for p in (target, plist, receipt)}
-        changed = not plist.exists() or plist.read_bytes() != payload
+        changed = not plist.exists() or plist.read_bytes() != payload or log_changed
         loaded = subprocess.run(['/bin/launchctl', 'print', f'system/{definition["Label"]}'],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
         try:

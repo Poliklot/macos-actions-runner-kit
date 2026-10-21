@@ -191,7 +191,8 @@ class SchedulerTests(unittest.TestCase):
             args = SimpleNamespace(user='ci_sample', source_sha256=hashlib.sha256(
                 (ROOT / 'examples/scripts/ci-host.py').read_bytes()).hexdigest(),
                 minimum_free_gib=40, target_free_gib=55, gradle_home=[], replace=False)
-            account = SimpleNamespace(pw_dir='/Users/ci_sample', pw_uid=502)
+            # Fake root installation, real unprivileged fixture files.
+            account = SimpleNamespace(pw_dir='/Users/ci_sample', pw_uid=os.getuid(), pw_gid=os.getgid())
             state = {'loaded': False, 'bootstraps': 0, 'fail': False}
 
             def launch(command, **_kwargs):
@@ -212,12 +213,14 @@ class SchedulerTests(unittest.TestCase):
                     patch.object(installer, 'protected'), \
                     patch.object(installer.platform, 'system', return_value='Darwin'), \
                     patch.object(installer.os, 'getuid', return_value=0), \
+                    patch.object(installer.os, 'chown') as chown, \
                     patch.object(installer.pwd, 'getpwnam', return_value=account), \
                     patch.object(installer.subprocess, 'check_output', return_value='staff\n'), \
                     patch.object(installer.subprocess, 'run', side_effect=launch), \
                     patch.object(installer, 'load_host_tools', return_value=SimpleNamespace(lease=lambda _: nullcontext())):
                 installer.install(args)
                 installer.install(args)
+                chown.assert_called_with(logs / 'ci_sample.log', account.pw_uid, account.pw_gid)
                 self.assertEqual(state['bootstraps'], 1)
                 paths = [root / 'ci-host.py', root / 'ci_sample.receipt.json',
                          daemons / 'org.local-actions.maintenance.ci_sample.plist']
