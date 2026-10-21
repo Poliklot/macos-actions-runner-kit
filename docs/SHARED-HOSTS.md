@@ -145,6 +145,11 @@ maintain the reserve, move workloads or add capacity by explicit agreement. Do n
 silently erase recovery data or reduce the minimum. In a quiet agreed window, run
 the failing probes first, then one complete CI; record source SHA, disk before/after,
 RAM/swap and actual test outcomes. Offline tests do not prove live workload acceptance.
+Some suites inspect Git history or a base/head diff: a source-only archive is not
+an equivalent CI checkout. Use a clean clone or credential-free Git bundle with
+the exact source and required comparison base available. Never copy personal Git
+configuration/credentials, disable such tests, or substitute an empty comparison
+just to make an archive pass.
 
 To roll back the schedule (not the runner), as administrator:
 
