@@ -25,6 +25,7 @@ Distinguish these independent failures:
 | Evidence | Next step |
 | --- | --- |
 | Runner offline, no job assigned | Inspect the listener/supervisor, account and network |
+| Runner online and idle, but a matching job remains queued | Check labels, job dependencies and broker-poll logs; a connected listener can have a stalled session |
 | Free disk below the project's minimum | Inventory actual storage, preserve work, reclaim only unused rebuildable data |
 | Docker build cache is already empty | Stop repeating Docker prune; inspect other users, SDKs, simulator data and swap |
 | Dependency audit reports an advisory | Fix the locked dependency; retrying or deleting caches does not fix a vulnerability |
@@ -35,6 +36,14 @@ budget. Pause or hand over heavy work by agreement; never kill a developer's VM,
 simulator, agents or apps to make CI green. Never delete swap files. Connecting a
 mobile app to a staging API can remove the need for a local backend/database, but
 does not eliminate local Flutter/Xcode builds or the simulator.
+
+For a stalled broker session, first verify there is **no active `Runner.Worker`**
+and no foreground runner owned by another operator. Then gracefully restart only
+the registered listener through its existing service or normal stop/start flow.
+Do not re-register the runner, delete credentials/registration, reset the checkout
+or kill a running job to repair an idle connection. Recheck that the queued job is
+actually assigned; `online` alone is not proof of recovery. A successful idle
+restart is an operational recovery, not proof of the underlying network cause.
 
 ## A second gate failure is not necessarily the same incident
 
@@ -210,6 +219,13 @@ CI-пользователь отделяет права и секреты, но 
 `online` означает подключённый listener, а не одновременно выполняющуюся сборку.
 Подкачка занимает диск; холодный и бесшумный Mac тоже может испытывать дефицит RAM.
 Разделяйте нехватку места, сетевую очередь, ошибки security audit и падения тестов.
+
+Если runner online/idle, но подходящий job остаётся в очереди, проверьте labels,
+зависимости job и broker-poll logs. При зависшей сессии и подтверждённом отсутствии
+`Runner.Worker`/чужого foreground runner штатно перезапустите только listener.
+Не удаляйте регистрацию/credentials и не прерывайте работающую сборку. Восстановление
+подтверждает назначенный job, а не один статус online; успешный restart не доказывает
+первопричину сетевой ошибки.
 
 Общий рецепт opt-in: `ci-host.py report` показывает ресурсы; `run -- команда`
 сериализует тяжёлую работу через общий файловый lock. Одинаковый GitHub concurrency
