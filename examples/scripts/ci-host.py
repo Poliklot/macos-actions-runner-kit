@@ -69,6 +69,15 @@ def active_builds():
     while parent > 0 and parent not in ancestors:
         ancestors.add(parent)
         parent = parents.get(parent, 0)
+    # Fetch arguments once rather than spawning ps for every Node/Java process
+    # for every cache entry. Arguments remain private and are never reported.
+    arguments = subprocess.check_output(
+        ['/bin/ps', '-axo', 'pid=,args='], text=True, timeout=10)
+    arguments_by_pid = {}
+    for line in arguments.splitlines():
+        pieces = line.split(None, 1)
+        if pieces and pieces[0].isdigit():
+            arguments_by_pid[int(pieces[0])] = pieces[1] if len(pieces) > 1 else ''
     found = []
     for row in rows:
         if len(row) != 3:
@@ -79,18 +88,15 @@ def active_builds():
         name = Path(command).name
         busy = name in {'Runner.Worker', 'xcodebuild', 'swift-frontend', 'gradle', 'gradlew'}
         if name in {'java', 'dart', 'dartvm', 'docker', 'docker-buildx', 'node'}:
-            try:
-                args = subprocess.check_output(
-                    ['/bin/ps', '-p', pid, '-o', 'args='], text=True, timeout=5).strip()
-            except subprocess.CalledProcessError:
-                # A short-lived tool may exit between the process snapshot and
-                # this query. Ignore only a confirmed vanished PID; permission
-                # or inspection failures for a live process still fail closed.
+            args = arguments_by_pid.get(int(pid))
+            if args is None:
+                # Short-lived tools can exit between snapshots. Only a confirmed
+                # vanished PID is safe to ignore; live inspection fails closed.
                 try:
                     os.kill(int(pid), 0)
                 except ProcessLookupError:
                     continue
-                raise
+                raise RuntimeError('Cannot inspect a live build-capable process')
             busy = bool(re.search(
                 r'GradleMain|GradleWorkerMain|flutter_tools.*\b(build|test|run)\b|'
                 r'\bdocker(?:-buildx)?\s+(?:build|buildx\s+build)\b|'

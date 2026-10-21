@@ -87,14 +87,23 @@ class LeaseTests(unittest.TestCase):
 
 class ProcessTests(unittest.TestCase):
     def test_vanished_process_does_not_block_maintenance_but_live_failure_does(self):
-        outputs = ['999999 1 /usr/bin/node\n', subprocess.CalledProcessError(1, 'ps')]
+        outputs = ['999999 1 /usr/bin/node\n', '']
         with patch.object(host.subprocess, 'check_output', side_effect=outputs), \
                 patch.object(host.os, 'kill', side_effect=ProcessLookupError):
             self.assertEqual(host.active_builds(), [])
         with patch.object(host.subprocess, 'check_output', side_effect=outputs), \
                 patch.object(host.os, 'kill', return_value=None):
-            with self.assertRaises(subprocess.CalledProcessError):
+            with self.assertRaises(RuntimeError):
                 host.active_builds()
+
+    def test_process_arguments_are_queried_once_and_never_reported(self):
+        rows = '999991 1 /usr/bin/node\n999992 1 /usr/bin/java\n999993 1 /usr/bin/dartvm\n'
+        args = '999991 node /fixture/jest --token=private-fixture\n999992 java GradleWorkerMain\n999993 dartvm flutter_tools.snapshot run\n'
+        with patch.object(host.subprocess, 'check_output', side_effect=[rows, args]) as query:
+            builds = host.active_builds()
+        self.assertEqual(query.call_count, 2)
+        self.assertEqual([b['tool'] for b in builds], ['node', 'java', 'dartvm'])
+        self.assertNotIn('private-fixture', repr(builds))
 
 
 class CacheTests(unittest.TestCase):
